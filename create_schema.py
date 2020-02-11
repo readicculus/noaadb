@@ -1,8 +1,8 @@
 from sqlalchemy import create_engine
-from noaadb.models import Base
-from noaadb.config import config
 
-DATABASE_URI = 'postgres+psycopg2://%s:%s@localhost:5432/noaa' % (config["db_user"], config["db_password"])
+from noaadb import DATABASE_URI
+from noaadb.models import Base
+
 engine = create_engine(DATABASE_URI, echo=True)
 
 Base.metadata.create_all(engine)

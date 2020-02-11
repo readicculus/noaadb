@@ -19,7 +19,7 @@ class Images(Base):
     file_name = Column(VARCHAR(200), nullable=False)
 
     def __repr__(self):
-        return "<Images(id='{}', type='{}', foggy={}, quality={}, width={}, height={}, depth={}, flight={}, time={}, file_name={})>" \
+        return "<Images(id='{}', type='{}', foggy='{}', quality='{}', width='{}', height='{}', depth='{}', flight='{}', time='{}', file_name='{}')>" \
             .format(self.id, self.type, self.foggy, self.quality, self.width, self.height, self.depth, self.flight, self.time, self.file_name)
 
 
@@ -46,7 +46,7 @@ class Manifests(Base):
     notes = Column(VARCHAR(500))
 
     def __repr__(self):
-        return "<Manifests(manifest_id='{}', job_name='{}', notes={})>" \
+        return "<Manifests(manifest_id='{}', job_name='{}', notes='{}')>" \
             .format(self.manifest_id, self.job_name, self.path, self.notes)
 
 
@@ -57,8 +57,8 @@ class Workers(Base):
     human = Column(BOOLEAN, nullable=False)
 
     def __repr__(self):
-        return "<Workers(worker_id='{}', name='{}')>" \
-            .format(self.worker_id, self.name)
+        return "<Workers(worker_id='{}', name='{}', human='{}')>" \
+            .format(self.worker_id, self.name, self.human)
 
 
 class Species(Base):
@@ -89,7 +89,7 @@ class LabelEntry(Base):
     manifest = Column(Integer, ForeignKey('manifests.manifest_id'), nullable=False)
 
     def __repr__(self):
-        return "<LabelEntry(id='{}', image='{}', species={}, x1={}, x2={}, y1={}, y2={}, age_class={}, confidence={}, is_shadow={}, start_date={}, end_date={}, hotspot_id={}, worker={}, manifest={})>" \
+        return "<LabelEntry(id='{}', image='{}', species='{}', x1='{}', x2='{}', y1='{}', y2='{}', age_class='{}', confidence='{}', is_shadow='{}', start_date='{}', end_date='{}', hotspot_id='{}', worker='{}', manifest='{}')>" \
             .format(self.id, self.image, self.species, self.x1, self.x2, self.y1, self.y2,
                     self.age_class, self.confidence, self.is_shadow, self.start_date, self.end_date, self.hotspot_id, self.worker, self.manifest)
 
@@ -104,8 +104,8 @@ class Labels(Base):
     ir_accepted = Column(BOOLEAN, default=False)
 
     def __repr__(self):
-        return "<Labels(id='{}', eo_label='{}', ir_label={}, hs_id={}, eo_finalized={}, ir_finalized={})>" \
-            .format(self.id, self.eo_label, self.ir_label, self.hs_id, self.eo_finalized, self.ir_finalized)
+        return "<Labels(id='{}', eo_label='{}', ir_label='{}', hs_id='{}', eo_finalized='{}', ir_finalized='{}')>" \
+            .format(self.id, self.eo_label, self.ir_label, self.hs_id, self.eo_accepted, self.ir_accepted)
 
 
 
