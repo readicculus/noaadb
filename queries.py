@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 
 # Get queries
-from noaadb.models import Images
+from noaadb.models import Images, Species
 
 
 def get_image(con, im_name):
@@ -12,6 +12,8 @@ def get_image(con, im_name):
     cur = con.cursor()
     cur.execute(qs)
     return cur.fetchall()
+
+
 
 
 
@@ -52,3 +54,6 @@ def get_table_col_names(con, table_str):
 
 def image_exists(session, name):
     return session.query(session.query(Images).filter_by(file_name=name).exists()).scalar()
+
+def species_exists(session, name):
+    return session.query(session.query(Species).filter_by(name=name).exists()).scalar()

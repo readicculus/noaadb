@@ -42,43 +42,43 @@ class Chips(Base):
             .format(self.id, self.file_path, self.relative_x1, self.relative_y1, self.relative_x2, self.relative_y2, self.image_id)
 
 
-class Manifests(Base):
-    __tablename__ = 'manifests'
-    manifest_id = Column(Integer, primary_key=True)
-    job_name = Column(VARCHAR(100), nullable=False)
-    file_path = Column(FILEPATH, nullable=False)
+class Jobs(Base):
+    __tablename__ = 'jobs'
+    id = Column(Integer, primary_key=True)
+    job_name = Column(VARCHAR(100), nullable=False, unique=True)
+    file_path = Column(FILEPATH, nullable=False, unique=True)
     notes = Column(VARCHAR(500))
 
     def __repr__(self):
-        return "<Manifests(manifest_id='{}', job_name='{}', notes='{}')>" \
-            .format(self.manifest_id, self.job_name, self.file_path, self.notes)
+        return "<Jobs(id='{}', job_name='{}', notes='{}')>" \
+            .format(self.id, self.job_name, self.file_path, self.notes)
 
 
 class Workers(Base):
     __tablename__ = 'workers'
-    worker_id = Column(Integer, autoincrement=True, primary_key=True)
-    name = Column(VARCHAR(100), nullable=False)
+    id = Column(Integer, autoincrement=True, primary_key=True)
+    name = Column(VARCHAR(100), nullable=False, unique=True)
     human = Column(BOOLEAN, nullable=False)
 
     def __repr__(self):
-        return "<Workers(worker_id='{}', name='{}', human='{}')>" \
-            .format(self.worker_id, self.name, self.human)
+        return "<Workers(id='{}', name='{}', human='{}')>" \
+            .format(self.id, self.name, self.human)
 
 
 class Species(Base):
     __tablename__ = 'species'
-    species_id = Column(Integer, autoincrement=True, primary_key=True)
-    name = Column(VARCHAR(100), nullable=False)
+    id = Column(Integer, autoincrement=True, primary_key=True)
+    name = Column(VARCHAR(100), nullable=False, unique=True)
 
     def __repr__(self):
-        return "<Species(species_id='{}', name='{}')>" \
-            .format(self.species_id, self.name)
+        return "<Species(id='{}', name='{}')>" \
+            .format(self.id, self.name)
 
 class LabelEntry(Base):
     __tablename__ = 'label_entry'
     id = Column(Integer, autoincrement=True, primary_key=True)
     image = Column(Integer, nullable=False)
-    species = Column(Integer, ForeignKey('species.species_id'), nullable=False)
+    species = Column(Integer, ForeignKey('species.id'), nullable=False)
     x1 = Column(Integer, nullable=False)
     x2 = Column(Integer, nullable=False)
     y1 = Column(Integer, nullable=False)
@@ -89,8 +89,8 @@ class LabelEntry(Base):
     start_date = Column(Date)
     end_date = Column(Date)
     hotspot_id = Column(VARCHAR(50))
-    worker = Column(Integer, ForeignKey('workers.worker_id'), nullable=False)
-    manifest = Column(Integer, ForeignKey('manifests.manifest_id'), nullable=False)
+    worker = Column(Integer, ForeignKey('workers.id'), nullable=False)
+    job = Column(Integer, ForeignKey('jobs.id'), nullable=False)
 
     __table_args__ = (
         CheckConstraint('x1<x2 AND y1<y2',
