@@ -4,56 +4,33 @@ from sqlalchemy.orm import sessionmaker
 
 
 # Get queries
-from noaadb.models import Images, Species
+from noaadb.models import NOAAImage, Species, Job, Worker
 
+def get_image(session, name):
+    return  session.query(NOAAImage).filter_by(file_name=name).first()
 
-def get_image(con, im_name):
-    qs = "SELECT * FROM images WHERE file_name='%s'" % im_name
-    cur = con.cursor()
-    cur.execute(qs)
-    return cur.fetchall()
+def get_species(session, name):
+    return  session.query(Species).filter_by(name=name).first()
 
+def get_job_by_name(session, job_name):
+    return  session.query(Job).filter_by(job_name=job_name).first()
 
+def get_worker(session, name):
+    return  session.query(Worker).filter_by(name=name).first()
 
+# get all
+def get_all_species(session):
+    return  session.query(Species).all()
 
-
-
-
-# Schema related queries
-def get_tables(con, schema):
-    cur = con.cursor()
-    cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = '%s'" % schema)
-    return cur.fetchall()
-
-def table_exists(con, table_str):
-
-    exists = False
-    try:
-        cur = con.cursor()
-        cur.execute("select exists(select relname from pg_class where relname='" + table_str + "')")
-        exists = cur.fetchone()[0]
-        cur.close()
-    except psycopg2.Error as e:
-        print(e)
-    return exists
-
-def get_table_col_names(con, table_str):
-
-    col_names = []
-    try:
-        cur = con.cursor()
-        cur.execute("select * from " + table_str + " LIMIT 0")
-        for desc in cur.description:
-            col_names.append(desc[0])
-        cur.close()
-    except psycopg2.Error as e:
-        print(e)
-
-    return col_names
-
-
+# exists queries
 def image_exists(session, name):
-    return session.query(session.query(Images).filter_by(file_name=name).exists()).scalar()
+    return session.query(session.query(NOAAImage).filter_by(file_name=name).exists()).scalar()
 
 def species_exists(session, name):
     return session.query(session.query(Species).filter_by(name=name).exists()).scalar()
+
+def job_exists(session, job_name):
+    return session.query(session.query(Job).filter_by(job_name=job_name).exists()).scalar()
+
+def worker_exists(session, name):
+    return session.query(session.query(Worker).filter_by(name=name).exists()).scalar()
