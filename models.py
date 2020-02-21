@@ -1,6 +1,6 @@
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Date, VARCHAR, DateTime, BOOLEAN, ForeignKey, \
-    MetaData, Integer
+    MetaData, Integer, UniqueConstraint
 from sqlalchemy.orm import validates
 from sqlalchemy.schema import CheckConstraint
 from sqlalchemy.dialects.postgresql import ENUM
@@ -20,15 +20,14 @@ class NOAAImage(Base):
     height = Column(Integer, nullable=False)
     depth = Column(Integer, nullable=False)
     flight = Column(VARCHAR(50))
-    bad_res = Column(BOOLEAN, default=False)
     survey = Column(VARCHAR(100))
     timestamp = Column(DateTime(timezone=True))
     cam_position = Column(VARCHAR(100))
 
     def __repr__(self):
-        return "<NOAAImage(id='{}', type='{}', foggy='{}', quality='{}', width='{}', height='{}', depth='{}', flight='{}', time='{}', bad_res='{}' file_name='{}'" \
-               " survey='{}' timestamp='{}' cam_position='{}')>" \
-            .format(self.id, self.type, self.foggy, self.quality, self.width, self.height, self.depth, self.flight, self.timestamp, self.bad_res, self.file_name
+        return "<NOAAImage(id='{}', type='{}', foggy='{}', quality='{}', width='{}', height='{}', depth='{}', flight='{}', time='{}', file_name='{},'" \
+               " survey='{}', timestamp='{}', cam_position='{}')>" \
+            .format(self.id, self.type, self.foggy, self.quality, self.width, self.height, self.depth, self.flight, self.timestamp, self.file_name
                     , self.survey, self.timestamp, self.cam_position)
 
 
@@ -102,6 +101,7 @@ class Label(Base):
     __table_args__ = (
         CheckConstraint('x1<=x2 AND y1<=y2',
                         name='bbox_valid'),
+        UniqueConstraint('x1', 'x2', 'y1', 'y2', 'image', 'species', name='_label_unique_constraint'),
         )
     @validates('x1','x2','y1','y2')
     def validate_bbox(self, key, f) -> str:
@@ -129,12 +129,14 @@ class Label(Base):
 class Hotspot(Base):
     __tablename__ = 'hotspots'
     id = Column(Integer, autoincrement=True, primary_key=True)
-    eo_label = Column(Integer, ForeignKey('labels.id'))
-    ir_label = Column(Integer, ForeignKey('labels.id'))
+    eo_label = Column(Integer, ForeignKey('labels.id'), unique=True, nullable=True)
+    ir_label = Column(Integer, ForeignKey('labels.id'), unique=True, nullable=True)
     hs_id = Column(VARCHAR(50))
     eo_accepted = Column(BOOLEAN, default=False)
     ir_accepted = Column(BOOLEAN, default=False)
-
+    __table_args__ = (
+        UniqueConstraint('eo_label', 'ir_label'),
+        )
     def __repr__(self):
         return "<Hotspots(id='{}', eo_label='{}', ir_label='{}', hs_id='{}', eo_finalized='{}', ir_finalized='{}')>" \
             .format(self.id, self.eo_label, self.ir_label, self.hs_id, self.eo_accepted, self.ir_accepted)
