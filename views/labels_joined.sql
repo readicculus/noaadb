@@ -1,7 +1,7 @@
 drop view if exists noaa_test.labels_joined;
 create or replace view noaa_test.labels_joined as (
   SELECT
-   l.id as id,
+   l.id as label_id,
    l.hotspot_id,
    i.file_name,
    i.type as image_type,
@@ -24,7 +24,8 @@ create or replace view noaa_test.labels_joined as (
    l.end_date,
    s.name as species,
    j.job_name as job_name,
-   w.name as worker
+   w.name as worker,
+   i.id as img_row_id
   FROM
      noaa_test.labels as l
   INNER JOIN noaa_test.noaa_images as i ON l.image = i.id

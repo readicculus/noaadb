@@ -14,7 +14,8 @@ create or replace view noaa_test.hotspots_joined as (
      l_rgb.confidence,
      l_rgb.start_date,
      l_rgb.species,
-     l_rgb.job_name,
+     l_rgb.job_name as rgb_job,
+     l_ir.job_name as ir_job,
      l_rgb.worker as rgb_worker,
      l_ir.worker as ir_worker,
      l_rgb.file_name as rgb_image,
@@ -30,7 +31,12 @@ create or replace view noaa_test.hotspots_joined as (
      l_ir.image_timestamp as ir_timestamp,
      l_ir.camera_position as ir_camera_position,
      l_rgb.survey,
-     l_rgb.flight
+     l_rgb.flight,
+     l_ir.label_id as ir_label_row_id,
+     l_rgb.label_id as rgb_label_row_id,
+     hs.id as hotspot_row_id,
+     l_rgb.img_row_id as rgb_img_row_id,
+     l_ir.img_row_id as ir_img_row_id
   FROM
      noaa_test.hotspots as hs
   LEFT JOIN noaa_test.labels_joined as l_rgb ON hs.eo_label = l_rgb.id
