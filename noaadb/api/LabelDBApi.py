@@ -44,6 +44,14 @@ class LabelDBApi:
         return True
 
     def execute(self, sql):
+        """
+        Execute sql string
+
+        Parameters:
+           sql (:obj:`str`): sql
+
+        :return: `.Results`
+        """
         self.verify_session()
         return self.session.execute(sql)
 
