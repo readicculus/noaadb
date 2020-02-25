@@ -1,3 +1,3 @@
-from noaadb.noaadb.schema import refresh_schema
+from noaadb.noaadb.schema.schema_ops import refresh_schema
 
 refresh_schema()

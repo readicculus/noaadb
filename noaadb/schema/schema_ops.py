@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 
 from noaadb import DATABASE_URI
-from noaadb.noaadb.schema import Base
+from noaadb.noaadb.schema.models import Base
 
 def drop_schema(echo=False):
     engine = create_engine(DATABASE_URI, echo=echo)
