@@ -4,18 +4,18 @@ It was built with python3.6 and uses the lovely sqlalchemy api to allow for easy
 
 ### Example usage:
 Open a new session:
-```
+```python
 api = LabelDBApi()
 api.begin_session()
 ```
 
 When done close the session:
-```
+```python
 api.close_session()
 ```
 
 Here is an example of how you would get all hotspots:
-```
+```python
 api = LabelDBApi()
 api.begin_session()
 all_hotspots = api.get_hotspots()
@@ -26,7 +26,7 @@ Suppose you only wanted only hotspots your call would look like this:
 `api.get_hotspots(species_filter=('Ringed Seal', 'Bearded Seal', 'UNK Seal'))`
 
 I will add more capabilities to this on an as needed base but you can always do the following to create your own sqlalchemy queries:
-```
+```python
 api = LabelDBApi()
 Session = api.get_session_config()
 session = Session() # begin the session
