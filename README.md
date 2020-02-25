@@ -2,7 +2,12 @@
 This package allows you to query the data.  
 It was built with python3.6 and uses the lovely sqlalchemy api to allow for easy query serialization.
 
-To install:
+Install requirements for psycopg2(python postgresql driver):
+```
+sudo apt install libpq-dev python3-dev
+```
+
+Install package
 ```
 git clone git@github.com:readicculus/noaadb.git
 cd noaadb/
@@ -40,8 +45,10 @@ all_hotspots = api.get_hotspots()
 api.close_session()
 ```
 
-Suppose you only wanted only hotspots your call would look like this:
-`api.get_hotspots(species_filter=('Ringed Seal', 'Bearded Seal', 'UNK Seal'))`
+Suppose you only wanted only seal hotspots your call would look like this:
+```python
+seals = api.get_hotspots(species_filter=('Ringed Seal', 'Bearded Seal', 'UNK Seal'))
+```
 
 I will add more capabilities to this on an as needed base but you can always do the following to create your own sqlalchemy queries:
 ```python
