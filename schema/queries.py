@@ -1,6 +1,4 @@
-import psycopg2
-from sqlalchemy.orm import sessionmaker
-from noaadb.models import NOAAImage, Species, Job, Worker, Label
+from noaadb.schema.models import NOAAImage, Species, Job, Worker, Label, Hotspot
 
 
 # filter queries
@@ -15,6 +13,10 @@ def get_existing_label(session, label):
                                           x2=label.x2,
                                           y1=label.y1,
                                           y2=label.y2).first()
+
+def get_existing_hotspot(session, hs):
+    return session.query(Hotspot).filter_by(eo_label=hs.eo_label,
+                                          ir_label=hs.ir_label).first()
 # Get queries
 def get_image(session, name):
     return  session.query(NOAAImage).filter_by(file_name=name).first()
@@ -56,6 +58,7 @@ def label_exists(session, label):
                                     y2=label.y2).exists()).scalar()
 
 def add_job_if_not_exists(session, name, path):
+    j = get_job_by_name(session, name)
     if not job_exists(session, name):
         j = Job(
             job_name=name,
@@ -63,14 +66,18 @@ def add_job_if_not_exists(session, name, path):
             notes=""
         )
         session.add(j)
+        session.flush()
 
-    return get_job_by_name(session, name)
+    return j
 
 def add_worker_if_not_exists(session, name, is_human):
-    if not worker_exists(session, name):
+    w = get_worker(session, name)
+    if not w:
         w = Worker(
             name=name,
             human=is_human
         )
         session.add(w)
-    return get_worker(session, name)
+        session.flush()
+
+    return w
