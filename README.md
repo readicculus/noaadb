@@ -42,7 +42,7 @@ api.close_session()
 
 Suppose you only wanted only seal hotspots your call would look like this:
 ```python
-seals = eapi.get_hotspots(species_filter=('Ringed Seal', 'Bearded Seal', 'UNK Seal'))
+seals = api.get_hotspots(species_filter=('Ringed Seal', 'Bearded Seal', 'UNK Seal'))
 ```
 
 I will add more capabilities to this on an as needed base but you can always do the following to create your own sqlalchemy queries:
