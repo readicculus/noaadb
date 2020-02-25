@@ -2,6 +2,12 @@
 This package allows you to query the data.  
 It was built with python3.6 and uses the lovely sqlalchemy api to allow for easy query serialization.
 
+To install:
+```
+git clone git@github.com:readicculus/noaadb.git
+cd noaadb/
+pip install . 
+```
 #### structure
     .
     ├── api                    # public readonly api
@@ -19,17 +25,15 @@ The public api includes hardcoded readonly credentials.
 #### Example usage:
 Open a new session:
 ```python
+from noaadb.api import LabelDBApi
 api = LabelDBApi()
 api.begin_session()
-```
-
-When done close the session:
-```python
-api.close_session()
+api.close_session() # when done close the session
 ```
 
 Here is an example of how you would get all hotspots:
 ```python
+from noaadb.api import LabelDBApi
 api = LabelDBApi()
 api.begin_session()
 all_hotspots = api.get_hotspots()
@@ -41,6 +45,7 @@ Suppose you only wanted only hotspots your call would look like this:
 
 I will add more capabilities to this on an as needed base but you can always do the following to create your own sqlalchemy queries:
 ```python
+from noaadb.api import LabelDBApi
 api = LabelDBApi()
 Session = api.get_session_config()
 session = Session() # begin the session
