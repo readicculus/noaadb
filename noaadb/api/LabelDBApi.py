@@ -22,7 +22,6 @@ class LabelDBApi:
             "db_host": "yuvalboss.com",
             "schema_name": "noaa_labels"
         }
-
         self.DATABASE_URI = 'postgres+psycopg2://%s:%s@%s:5432/%s' % \
                             (self.config["db_user"], self.config["db_password"], self.config["db_host"], self.config["db_name"])
         self.noaa_engine = create_engine(self.DATABASE_URI)
@@ -48,6 +47,18 @@ class LabelDBApi:
         self.verify_session()
         return self.session.execute(sql)
 
+    def get_hotspot(self, hotspot_id):
+        """
+        Get a hotspot by the hotspot id
+
+        Parameters:
+           hotspot_id (:obj:`str`): hotspot identifier
+
+        :return: `.Hotspot` or None if it does not exist as a Hotspot
+        """
+        res = self.session.query(Hotspot).filter_by(hs_id=hotspot_id).first()
+        return res.all()
+
     def get_hotspots(self, species_filter = None):
         """
         Get all Hotspots with corresponding IR & RGB Labels, Images, workers, jobs, species etc...
@@ -57,6 +68,7 @@ class LabelDBApi:
 
         :return: a list of two element arrays [:class: `.Hotspot`]
         """
+        self.verify_session()
         res = self.session.query(Hotspot)
 
         if species_filter is not None:
@@ -121,4 +133,4 @@ class LabelDBApi:
 
     def verify_session(self):
         if self.session is None:
-            raise Exception("No current session")
+            raise Exception("No current session, use api.begin_session()")
