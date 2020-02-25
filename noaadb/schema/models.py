@@ -4,8 +4,11 @@ from sqlalchemy import Column, Date, VARCHAR, DateTime, BOOLEAN, ForeignKey, \
 from sqlalchemy.orm import validates, relationship
 from sqlalchemy.schema import CheckConstraint, Sequence
 from sqlalchemy.dialects.postgresql import ENUM
+
+from noaadb.schema.config import config
+
 FILEPATH = VARCHAR(400)
-meta = MetaData(schema="noaa_test")
+meta = MetaData(schema=config["schema_name"])
 Base = declarative_base(metadata=meta)
 
 class NOAAImage(Base):
