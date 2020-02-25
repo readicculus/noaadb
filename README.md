@@ -7,7 +7,7 @@ Install requirements for psycopg2(python postgresql driver):
 sudo apt install libpq-dev python3-dev
 ```
 
-Install package
+Install package from source
 ```
 git clone git@github.com:readicculus/noaadb.git
 cd noaadb/
