@@ -1,4 +1,4 @@
-from noaadb.schema.models import NOAAImage, Species, Job, Worker, Label, Hotspot
+from noaadb.noaadb.schema import NOAAImage, Species, Job, Worker, Label, Hotspot
 
 
 # filter queries

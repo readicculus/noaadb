@@ -20,7 +20,7 @@ class LabelDBApi:
             "db_user": "readonly",
             "db_name": "noaa",
             "db_host": "yuvalboss.com",
-            "schema_name": "noaa_test" if os.environ["DEBUG"] else "noaa"
+            "schema_name": "noaa_test" if "DEBUG" in os.environ and os.environ["DEBUG"] else "noaa"
         }
 
         self.DATABASE_URI = 'postgres+psycopg2://%s:%s@%s:5432/noaa' % \
