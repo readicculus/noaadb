@@ -2,7 +2,21 @@
 This package allows you to query the data.  
 It was built with python3.6 and uses the lovely sqlalchemy api to allow for easy query serialization.
 
-### Example usage:
+#### structure
+    .
+    ├── api                    # public readonly api
+    │   └── api.py             # api stuff
+    ├── schema                 # generate datasets/chips for training
+    │   ├── models.py          # schema definition
+    │   ├── queries.py         # utility queries
+    │   ├── config.py          # database connection configurations for creation/populations (requires env variables)
+    │   └── restore_db.py      # recreates all tables in the schema
+    ├── setup.py               # project path/dependency setup stuff
+    └── README.md
+
+The public api includes hardcoded readonly credentials.
+
+#### Example usage:
 Open a new session:
 ```python
 api = LabelDBApi()
