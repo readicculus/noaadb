@@ -2,7 +2,7 @@ import os
 
 from sqlalchemy import create_engine, and_, not_, or_
 from sqlalchemy.orm import sessionmaker, aliased
-from noaadb.schema.models import Label, NOAAImage, Worker, Species, Hotspot
+from noaadb.schema.models import Label, NOAAImage, Worker, Species, Hotspot, Base
 
 class LabelDBApi:
     """
@@ -20,11 +20,11 @@ class LabelDBApi:
             "db_user": "readonly",
             "db_name": "noaa",
             "db_host": "yuvalboss.com",
-            "schema_name": "noaa_test" if "DEBUG" in os.environ and os.environ["DEBUG"] else "noaa"
+            "schema_name": "noaa_labels"
         }
 
-        self.DATABASE_URI = 'postgres+psycopg2://%s:%s@%s:5432/noaa' % \
-                            (self.config["db_user"], self.config["db_password"], self.config["db_host"])
+        self.DATABASE_URI = 'postgres+psycopg2://%s:%s@%s:5432/%s' % \
+                            (self.config["db_user"], self.config["db_password"], self.config["db_host"], self.config["db_name"])
         self.noaa_engine = create_engine(self.DATABASE_URI)
         self.Session = sessionmaker(bind=self.noaa_engine)
         self.session = None
