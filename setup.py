@@ -7,7 +7,7 @@ setup(
    author_email='yuval@cs.washington.edu',
    packages=['noaadb','noaadb.api', 'noaadb.schema'],
    scripts=[],
-   url='http://pypi.python.org/pypi/PackageName/',
+   url='git@github.com:readicculus/noaadb.git',
    license='LICENSE.txt',
    description='Package for querying animal bounding box labels and other metadata',
    long_description=open('README.md').read(),
