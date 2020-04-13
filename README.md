@@ -2,12 +2,15 @@
 This package allows you to query the data.  
 It was built with python3.6 and uses the lovely sqlalchemy api to allow for easy query serialization.
 
-Install requirements for psycopg2(python postgresql driver):
+Install requirements for psycopg2(python postgresql driver)
 ```
 sudo apt install libpq-dev python3-dev
 ```
-
-Install package from source
+Install package with pip
+```
+pip install git+ssh://git@github.com/readicculus/noaadb.git@v0.0.1
+```
+Or install package from source
 ```
 git clone git@github.com:readicculus/noaadb.git
 cd noaadb/
