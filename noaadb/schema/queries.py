@@ -1,4 +1,4 @@
-from noaadb.noaadb.schema import NOAAImage, Species, Job, Worker, Label, Hotspot
+from noaadb.schema.models import NOAAImage, Species, Job, Worker, Label, Hotspot, FalsePositives
 
 
 # filter queries
@@ -17,6 +17,11 @@ def get_existing_label(session, label):
 def get_existing_hotspot(session, hs):
     return session.query(Hotspot).filter_by(eo_label=hs.eo_label,
                                           ir_label=hs.ir_label).first()
+def get_existing_falsepositive(session, hs):
+    return session.query(FalsePositives).filter_by(eo_label=hs.eo_label,
+                                          ir_label=hs.ir_label).first()
+
+
 # Get queries
 def get_image(session, name):
     return  session.query(NOAAImage).filter_by(file_name=name).first()
