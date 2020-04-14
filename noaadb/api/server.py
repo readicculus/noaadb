@@ -1,11 +1,11 @@
 import json
 import time
-
+from gevent.pywsgi import WSGIServer
 from flask import request
 from sqlalchemy import not_, or_
 from sqlalchemy.orm import aliased
 
-from noaadb.api.config import app, cache
+from noaadb.api.config import *
 from noaadb.api.server_utils import validate_filter_opts, get_all_images, combind_images_labels_to_json, make_cache_key, \
     get_jobs_dict, get_workers_dict, get_species_dict
 from noaadb.api.models import *
@@ -100,5 +100,9 @@ def workers():
 def jobs():
     return json.dumps(get_jobs_dict())
 
+def main():
+    http_server = WSGIServer(('', 5000), app)
+    http_server.serve_forever()
+
 if __name__ == "__main__":
-    app.run(port=5000)
+    main()
