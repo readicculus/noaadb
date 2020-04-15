@@ -6,7 +6,7 @@ from flask_marshmallow import Marshmallow
 from flask_sqlalchemy import SQLAlchemy
 from noaadb import DATABASE_URI
 from noaadb.schema.models import Base
-
+from flask_swagger_ui import get_swaggerui_blueprint
 basedir = os.path.abspath(os.path.dirname(__file__))
 
 app = Flask(__name__)
@@ -22,3 +22,12 @@ cache = Cache(app,config={'CACHE_TYPE': 'filesystem' if not app.config["DEBUG"] 
 db = SQLAlchemy(app, model_class=Base)
 # Initialize Marshmallow
 ma = Marshmallow(app)
+
+swagger_blueprint = get_swaggerui_blueprint(
+    '/api',
+    '/static/swagger.json',
+    config={
+        'app_name': "NOAADB API"
+    }
+)
+app.register_blueprint(swagger_blueprint, url_prefix='/api')

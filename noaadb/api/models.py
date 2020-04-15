@@ -47,10 +47,6 @@ class LabelSchema(ma.SQLAlchemyAutoSchema):
         model = Label
         sqla_session = db.session
         include_fk = True
-    # image = Nested(NOAAImageSchema())
-    # worker = Nested(WorkerSchema())
-    # job = Nested(JobSchema())
-    # species = Nested(SpeciesSchema())
 
 label_schema = LabelSchema()
 labels_schema = LabelSchema(many=True)

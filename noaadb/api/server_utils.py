@@ -12,39 +12,40 @@ default_filter_options = \
     {
       "species_list": [
         "Ringed Seal",
-        "Bearded Seal"
-        "Polar Bear"
+        "Bearded Seal",
+        "Polar Bear",
         "UNK Seal"
       ],
       "image_type": "eo",
       "show_shadows": False,
-      "worker": "any",
-      "job": "any",
-      "invalid_labels_only": False,
+      "workers": [],
+      "jobs": [],
       "exclude_invalid_labels": True,
-      "show_removed": False
+      "show_removed_labels": False
     }
 
 
-def bool_type(str):
-    s=str.lower()
-    if s == "true":
-        return True
-    elif s == "false":
-        return False
-    raise Exception("Invalid bool type %s" % str)
-
 def validate_filter_opts(req):
     filter_params = {}
+    errors = {}
     for k in default_filter_options:
         if not k in req:
             filter_params[k] = default_filter_options[k]
         else:
-            if k in ["invalid_labels_only","show_shadows", "show_removed","exclude_invalid_labels"]:
-                filter_params[k] = bool_type(req[k])
+            if k in ["show_shadows", "show_removed_labels","exclude_invalid_labels"]:
+                if isinstance(req[k], bool):
+                    filter_params[k] = req[k]
+                else:
+                    errors[k] = "Invalid boolean %s, use true or false (without quotes)" % req[k]
+            elif k == "image_type":
+                if not req[k] in ["eo", "ir"]:
+                    errors[k] = "Invalid image_type %s, following are accepted options ['eo', 'ir']." % req[k]
+                else:
+                    filter_params[k] = req[k]
+
             else:
                 filter_params[k] = req[k]
-    return filter_params
+    return filter_params, errors
 
 def get_all_images(unique_image_ids):
     images = db.session.query(NOAAImage).options(db.defer('meta')).filter(NOAAImage.id.in_(unique_image_ids)).all()
@@ -62,7 +63,7 @@ def is_valid_label(im, label):
     return True
 
 def combind_images_labels_to_json(images, labels):
-    res = {"images":{}, "labels":{}, "invalid": {}}
+    res = {"images":{}, "labels":{}}
     start = time.time()
     serialized_ims = images_schema.dump(images)
     print("serialized_ims time: %.4f" % (time.time() - start))
@@ -76,20 +77,21 @@ def combind_images_labels_to_json(images, labels):
         label_im_id = label['image_id']
         if not label_im_id in res["labels"]:
             res["labels"][label_im_id] = []
-        res["labels"][label_im_id].append(label)
+
 
         valid = is_valid_label(res['images'][label_im_id], label)
-        if not valid:
-            if not label_im_id in res["invalid"]:
-                res["invalid"][label_im_id] = []
-            res["invalid"][label_im_id].append({"label_id":label["id"]})
-
+        label["valid"]=valid
+        res["labels"][label_im_id].append(label)
     return res
 
 def make_cache_key(*args, **kwargs):
+    if not request.data:
+        return ""
     payload = request.json
-    opts = validate_filter_opts(payload)
-    res = json.dumps(opts, sort_keys=True, separators=(',', ':'))
+    if payload == None:
+        return ""
+    opts, errors = validate_filter_opts(payload)
+    res = json.dumps({**opts, **errors} , sort_keys=True, separators=(',', ':'))
     hash_object = hashlib.sha1(res.encode('utf-8'))
     return hash_object.hexdigest()
 
