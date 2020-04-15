@@ -195,12 +195,6 @@
                         "description":"foobar",
                         "example":false
                     },
-                    "exclude_invalid_labels":{
-                        "type":"boolean",
-                        "default":"true",
-                        "description":"foobar",
-                        "example":true
-                    },
                     "show_removed_labels":{
                         "type":"boolean",
                         "default":"false",
@@ -240,13 +234,6 @@
                         "additionalProperties":{
                             "$ref":"#/components/schemas/label_array"
                         }
-                    },
-                    "invalid":{
-                        "type":"array",
-                        "items":{
-                            "type":"object"
-                        },
-                        "description":"x"
                     },
                     "image_count":{
                         "type":"integer",
