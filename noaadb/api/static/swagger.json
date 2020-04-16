@@ -225,7 +225,7 @@
                         "type":"boolean"
                     },
                     "quality":{
-                        "type":"float"
+                        "type":"number"
                     },
                     "survey":{
                         "type":"string"
