@@ -207,10 +207,40 @@
                 "type":"object",
                 "properties":{
                     "name":{
-                        "type":"integer"
+                        "type":"string"
                     },
                     "width":{
                         "type":"integer"
+                    },
+                    "height":{
+                        "type":"integer"
+                    },
+                    "path":{
+                        "type":"string"
+                    },
+                    "type":{
+                        "type":"string"
+                    },
+                    "foggy":{
+                        "type":"boolean"
+                    },
+                    "quality":{
+                        "type":"float"
+                    },
+                    "survey":{
+                        "type":"string"
+                    },
+                    "flight":{
+                        "type":"string"
+                    },
+                    "cam_position":{
+                        "type":"string"
+                    },
+                    "meta":{
+                        "type":"string"
+                    },
+                    "timestamp":{
+                        "type":"string"
                     }
                 }
             },
