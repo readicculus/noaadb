@@ -118,28 +118,39 @@ paths:
     post:
       tags:
       - Chips
-      summary: Returns a list of flights for each survey
+      summary: Returns chips for image chipping around labels
       parameters:
         - in: query
           name: w
           schema:
             type: integer
+            example: 640
           description: chip width
         - in: query
-          name: limit
+          name: h
           schema:
-            type: h
+            type: integer
+            example: 640
           description: chip height
+      requestBody:
+        description: Takes an array of label ids
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: integer
+              example: [222, 500]
       produces:
       - application/json
       responses:
         200:
-          description: OK
+          description: OK<br />Returns a dictionary of labels with their relative location within the chip, the percentage of the label within the chip.  The dictionary is grouped by image_id->chip_id->relative_label info
           content:
             application/json:
               schema:
                 type: object
-
 components:
   schemas:
     hotspotsRequest:
