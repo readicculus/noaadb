@@ -141,7 +141,7 @@ paths:
               type: array
               items:
                 type: integer
-              example: [222, 500]
+              example: [222, 223, 224]
       produces:
       - application/json
       responses:
