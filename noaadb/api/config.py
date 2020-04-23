@@ -25,7 +25,7 @@ ma = Marshmallow(app)
 
 swagger_blueprint = get_swaggerui_blueprint(
     '/api',
-    '/static/swagger.json',
+    '/static/swagger.yaml',
     config={
         'app_name': "NOAADB API"
     }

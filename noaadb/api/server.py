@@ -1,5 +1,7 @@
 import json
 import time
+from _operator import and_
+
 from gevent.pywsgi import WSGIServer
 from flask import request, render_template
 from sqlalchemy import not_, or_
@@ -8,10 +10,9 @@ from werkzeug.exceptions import BadRequest, abort, default_exceptions
 
 from noaadb.api.config import *
 from noaadb.api.server_utils import validate_filter_opts, get_all_images, combind_images_labels_to_json, make_cache_key, \
-    get_jobs_dict, get_workers_dict, get_species_dict, default_filter_options
+    get_jobs_dict, get_workers_dict, get_species_dict, default_filter_options, get_survey_flights_dict
 from noaadb.api.models import *
-
-
+from noaadb.schema.models import Chip, LabelChips
 
 default_exceptions[400] = BadRequest
 
@@ -80,6 +81,15 @@ def hotspots_filter():
     if len(opts["jobs"]) > 0:
         query = query.filter(Job.job_name.in_(opts["jobs"]))
 
+    if len(opts["surveys"]) > 0:
+        query = query.filter(NOAAImage.survey.in_(opts["surveys"]))
+
+    if len(opts["camera_positions"]) > 0:
+        query = query.filter(NOAAImage.cam_position.in_(opts["camera_positions"]))
+
+    if len(opts["flights"]) > 0:
+        query = query.filter(NOAAImage.flight.in_(opts["flights"]))
+
     query.order_by(Label.image_id)
 
     start = time.time()
@@ -119,6 +129,52 @@ def workers():
 @cache.cached(timeout=300)
 def jobs():
     return json.dumps(get_jobs_dict())
+
+@app.route("/api/surveys")
+@cache.cached(timeout=300)
+def surveys():
+    return json.dumps(get_survey_flights_dict())
+
+
+@app.route("/api/chips", methods=['POST'])
+@cache.cached(timeout=300)
+def chips_by_id():
+    width = request.args.get('w', default=-1, type=int)
+    height = request.args.get('h', default=-1, type=int)
+    unique_dimensions = db.session.query(Chip.width, Chip.height).distinct().all()
+    if not (width,height) in unique_dimensions:
+        res = {}
+        res['available_dimensions'] = unique_dimensions
+        res['message'] = "The width and height provided are not available, if you need something specific contact yuval@uw.edu."
+        return json.dumps(res)
+
+    if not request.data: abort(400, "Empty request is invalid.") # EMPTY  REQUEST ERROR
+    if request.json is None: abort(400, "Empty request is invalid.")  # EMPTY  REQUEST ERROR
+    if not isinstance(request.json, list): abort(400, "Request is not a list.")
+
+    payload = request.json
+    # get all label-chip pairs for the given label ids and the given chip dimensions
+    query = db.session.query(LabelChips)\
+        .filter(LabelChips.label_id.in_(payload))\
+        .join(Chip)\
+        .filter(and_(Chip.width==width, Chip.height==height))
+    qr = query.all()
+    chips = {}
+    relative_loc = {}
+    for label_chip in qr:
+        if not label_chip.label.image_id in relative_loc:
+            relative_loc[label_chip.label.image_id] = {}
+        if label_chip.label_id not in relative_loc[label_chip.label.image_id]:
+            relative_loc[label_chip.label.image_id][label_chip.label_id] = []
+        relative_loc[label_chip.label.image_id][label_chip.label_id].append(label_chip)
+
+        if not label_chip.chip_id in chips:
+            chips[label_chip.chip_id] = chip_schema.dump(label_chip.chip)
+
+    for k in relative_loc:
+        for j in relative_loc[k]:
+            relative_loc[k][j] = chiphotspots_schema.dump(relative_loc[k][j])
+    return json.dumps({"imageid_to_labelid_to_chipid":relative_loc, "chips_by_id": chips})
 
 def main():
     http_server = WSGIServer(('', 5000), app)

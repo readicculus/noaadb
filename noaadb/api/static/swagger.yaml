@@ -1,0 +1,325 @@
+---
+openapi: 3.0.0
+info:
+  description: Label dataset
+  version: 1.0.0
+  title: NOAA Arctic Animals Label API
+  contact:
+    email: yuval@cs.washington.edu
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+- url: "/"
+tags:
+- name: API
+  description: Endpoints for getting label and image information
+- name: Labeling
+  description: Endpoints for getting labeling information
+- name: Chips
+  description: Endpoints for getting image chips
+paths:
+  /api/hotspots:
+    post:
+      tags:
+      - API
+      summary: Returns hotspotsResult
+      requestBody:
+        description: Hotspot Filtering<br />Filter parameters that accept a list will
+          be ignored if empty because often we want to return everything for a parameter.
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/hotspotsRequest"
+      produces:
+      - application/json
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/hotspotsResult"
+        400:
+          description: Failed. Bad post data.
+  /api/species:
+    get:
+      tags:
+      - API
+      summary: Returns species
+      produces:
+      - application/json
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/species"
+  /api/jobs:
+    get:
+      tags:
+      - Labeling
+      summary: Returns jobs
+      produces:
+      - application/json
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/job"
+  /api/workers:
+    get:
+      tags:
+      - Labeling
+      summary: Returns workers
+      produces:
+      - application/json
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  "$ref": "#/components/schemas/worker"
+  /api/surveys:
+    get:
+      tags:
+      - API
+      summary: Returns a list of flights for each survey
+      produces:
+      - application/json
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  additionalProperties:
+                    items:
+                      type: string
+                    example:
+                    - R
+                    - L
+                    - "..."
+  /api/chips:
+    post:
+      tags:
+      - Chips
+      summary: Returns a list of flights for each survey
+      parameters:
+        - in: query
+          name: w
+          schema:
+            type: integer
+          description: chip width
+        - in: query
+          name: limit
+          schema:
+            type: h
+          description: chip height
+      produces:
+      - application/json
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+
+components:
+  schemas:
+    hotspotsRequest:
+      type: object
+      properties:
+        species_list:
+          required: 'false'
+          default:
+          - Ringed Seal
+          - Bearded Seal
+          - Polar Bear
+          - UNK Seal
+          description: If parameter not defined default is used, if given an empty
+            list all species are used<br/>See /api/species for a list of all species
+          type: array
+          items:
+            type: string
+          example:
+          - Polar Bear
+        workers:
+          type: array
+          items:
+            type: string
+          required: 'false'
+          default: []
+          description: If parameter not defined default is used, if given an empty
+            list all workers are used<br/>See /api/workers for a list of all workers
+          example: []
+        jobs:
+          type: array
+          items:
+            type: string
+          required: 'false'
+          default: []
+          description: If parameter not defined default is used, if given an empty
+            list all jobs are used<br/>See /api/jobs for a list of all jobs
+          example: []
+        surveys:
+          type: array
+          items:
+            type: string
+          required: 'false'
+          default: []
+          description: If parameter not defined default is used, if given an empty
+            list all jobs are used<br/>See /api/surveys for a list of all jobs
+          example: []
+        flights:
+          type: array
+          items:
+            type: string
+          required: 'false'
+          default: []
+          description: If parameter not defined default is used, if given an empty
+            list all jobs are used<br/>See /api/flights for a list of all jobs
+          example: []
+        camera_positions:
+          type: array
+          items:
+            type: string
+          required: 'false'
+          default: []
+          description: If parameter not defined default is used, if given an empty
+            list all jobs are used<br/>See /api/camera_positions for a list of all
+            jobs
+          example: []
+        image_type:
+          type: string
+          required: 'false'
+          default: eo
+          description: 'options: ''eo'' or ''ir'''
+          example: eo
+        show_shadows:
+          type: boolean
+          default: false
+          description: foobar
+          example: false
+        show_removed_labels:
+          type: boolean
+          default: 'false'
+          description: foobar
+          example: false
+    image:
+      type: object
+      properties:
+        name:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+        path:
+          type: string
+        type:
+          type: string
+        foggy:
+          type: boolean
+        quality:
+          type: number
+        survey:
+          type: string
+        flight:
+          type: string
+        cam_position:
+          type: string
+        meta:
+          type: string
+        timestamp:
+          type: string
+    label_array:
+      type: array
+      items:
+        "$ref": "#/components/schemas/label"
+    hotspotsResult:
+      type: object
+      properties:
+        images:
+          type: object
+          additionalProperties:
+            "$ref": "#/components/schemas/image"
+        labels:
+          type: object
+          additionalProperties:
+            "$ref": "#/components/schemas/label_array"
+        image_count:
+          type: integer
+          description: foobar
+        label_count:
+          type: integer
+          description: foobar
+    label:
+      type: object
+      properties:
+        id:
+          type: integer
+        x1:
+          type: integer
+        x2:
+          type: integer
+        y1:
+          type: integer
+        y2:
+          type: integer
+        is_shadow:
+          type: boolean
+        hotspot_id:
+          type: string
+          description: The NOAA-assigned identifier for an animal, if NULL then not
+            assigned an id yet
+        species_id:
+          type: integer
+          description: see /api/species for species_id->name data
+        start_date:
+          type: string
+          description: date of label insertion
+        age_class:
+          type: string
+        image_id:
+          type: integer
+    species:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: species id
+        name:
+          type: string
+    job:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: job id
+        job_name:
+          type: string
+        notes:
+          type: string
+    worker:
+      type: object
+      properties:
+        name:
+          type: string
+        human:
+          type: boolean

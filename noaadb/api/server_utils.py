@@ -20,6 +20,9 @@ default_filter_options = \
       "show_shadows": False,
       "workers": [],
       "jobs": [],
+      "surveys": [],
+      "flights": [],
+      "camera_positions": [],
       "exclude_invalid_labels": True,
       "show_removed_labels": False
     }
@@ -118,3 +121,20 @@ def get_jobs_dict():
     for item in jobs_dump:
         res[item["id"]] = {"job_name":item["job_name"], "notes":item["notes"]}
     return res
+
+def get_survey_flights_dict():
+    flights=db.session.query(NOAAImage.flight, NOAAImage.survey, NOAAImage.cam_position).distinct().all()
+    d = {}
+    for f,s,p in flights:
+        if s not in d:
+            d[s] = {}
+        if not f in d[s]:
+            d[s][f] = []
+        d[s][f].append(p)
+    for s in d:
+        for f in d[s]:
+            d[s][f].sort()
+
+
+    return d
+

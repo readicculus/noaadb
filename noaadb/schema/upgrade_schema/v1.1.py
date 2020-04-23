@@ -1,33 +1,27 @@
 from enum import Enum
 
 import numpy as np
-from sqlalchemy import create_engine, and_, Table
+from sqlalchemy import create_engine, and_
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, ForeignKey, \
-    MetaData, Integer, UniqueConstraint
-from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import validates, relationship
-from sqlalchemy.schema import Sequence
 from sqlalchemy import DDL
 from noaadb import DATABASE_URI
-from noaadb.schema.models import Label, NOAAImage, ImageType, Hotspot, Base, meta
+from noaadb.schema.models import Label, NOAAImage, ImageType, Hotspot, LabelChips, Chip, ImageDimension
 import cv2
 
 from scripts.util import printProgressBar
 
 
 
-engine = create_engine(DATABASE_URI, echo=True)
+engine = create_engine(DATABASE_URI, echo=False)
 
 engine.execute(DDL("CREATE SCHEMA IF NOT EXISTS chips"))
 
-ChipHotspot.__table__.drop(bind=engine, checkfirst=True)
+LabelChips.__table__.drop(bind=engine, checkfirst=True)
 Chip.__table__.drop(bind=engine, checkfirst=True)
 ImageDimension.__table__.drop(bind=engine, checkfirst=True)
 ImageDimension.__table__.create(bind=engine)
 Chip.__table__.create(bind=engine)
-ChipHotspot.__table__.create(engine)
+LabelChips.__table__.create(engine)
 
 # create session
 Session = sessionmaker(bind=engine)
@@ -62,8 +56,9 @@ def tile_image(im_w, im_h, c_w, c_h, overlap):
             tiles.append([(x1,y1),(x2,y2)])
 
     return tiles
+
 image_dims = {}
-chip_w, chip_h, chip_overlap = 640,640, 120
+
 for image in images:
     key = "%dx%d" % (image.width, image.height)
     if not key in image_dims:
@@ -72,48 +67,64 @@ for image in images:
             height=image.height
         )
         session.add(im_dim)
+        image_dims[key] = im_dim
     session.flush()
-    image_dims[key] = im_dim
 
+chip_w, chip_h, chip_overlap = 640,640, 120
+cw,ch,co = [416,640,832,1248], [416, 640,832,1248], [120, 120,120,120]
+for chip_w, chip_h, chip_overlap in zip(cw,ch,co):
+    for k in image_dims:
+        dims = image_dims[k]
+        tiles = tile_image(dims.width,dims.height, chip_w, chip_h, chip_overlap)
 
-for k in image_dims:
-    dims = image_dims[k]
-    tiles = tile_image(dims.width,dims.height, chip_w, chip_h, chip_overlap)
-
-    for tile in tiles:
-        c = Chip(
-            image_dimension=dims,
-            width=chip_w,
-            height=chip_h,
-            overlap=chip_overlap,
-            x1=tile[0][0],
-            y1=tile[0][1],
-            x2=tile[1][0],
-            y2=tile[1][1]
-        )
-        session.add(c)
-session.commit()
-session.flush()
+        for tile in tiles:
+            c = Chip(
+                image_dimension=dims,
+                width=chip_w,
+                height=chip_h,
+                overlap=chip_overlap,
+                x1=tile[0][0],
+                y1=tile[0][1],
+                x2=tile[1][0],
+                y2=tile[1][1]
+            )
+            session.add(c)
+    session.commit()
+    session.flush()
 # Populate ChipHotspot Table
 labels = session.query(Label).join(Hotspot, Hotspot.eo_label_id == Label.id)\
     .join(NOAAImage, Label.image_id == NOAAImage.id).join(Label.species)\
     .filter(NOAAImage.type == ImageType.RGB).all()
-notfound = []
+
+def percent_on(chip, label):
+
+    dx = min(chip.x2, label.x2) - max(chip.x1, label.x1)
+    dy = min(chip.y2, label.y2) - max(chip.y1, label.y1)
+    if (dx < 0) and (dy < 0):
+        return None
+    intersected_area = dx * dy
+    label_area = (label.x2 - label.x1) * (label.y2 - label.y1)
+    return intersected_area / label_area
+
 for i,label in enumerate(labels):
     printProgressBar(i, len(labels), prefix='Progress:', suffix='Complete', length=50, printEnd = "")
     im_w = label.image.width
     im_h = label.image.height
     key = "%dx%d" % (im_w, im_h)
-
     im_dim = image_dims[key]
-    chips_containing_label = session.query(Chip).filter(Chip.image_dimension_id == im_dim.id)\
-        .filter(and_(and_(Chip.x1 <= label.x1,Chip.x2 >= label.x2), and_(Chip.y1 <= label.y1,Chip.y2 >= label.y2)))\
+    # chips_containing_label = session.query(Chip).filter(Chip.image_dimension_id == im_dim.id)\
+    #     .filter(and_(Chip.x1 <= label.x1,Chip.x2 >= label.x2, Chip.y1 <= label.y1,Chip.y2 >= label.y2))\
+    #     .all()
+    chips_containing_partial__label = session.query(Chip).filter(Chip.image_dimension_id == im_dim.id) \
+        .filter(and_(Chip.x1 <= label.x2, label.x1 <= Chip.x2,Chip.y1 <= label.y2, label.y1 <= Chip.y2)) \
         .all()
-    if len(chips_containing_label) == 0:
-        notfound.append((label, im_w, im_h, label.species.name))
-    for chip in chips_containing_label:
-        ch = ChipHotspot(label=label, chip=chip)
+
+    for chip in chips_containing_partial__label:
+        ch = LabelChips(label=label, chip=chip, percent_intersection=percent_on(chip,label))
         session.add(ch)
     if i % 500 == 0:
         session.commit()
 session.commit()
+
+
+# Check for those not found
