@@ -10,7 +10,7 @@ from werkzeug.exceptions import BadRequest, abort, default_exceptions
 
 from noaadb.api.config import *
 from noaadb.api.server_utils import validate_filter_opts, get_all_images, combind_images_labels_to_json, make_cache_key, \
-    get_jobs_dict, get_workers_dict, get_species_dict, default_filter_options, get_survey_flights_dict
+    get_jobs_dict, get_workers_dict, get_species_dict, default_filter_options, get_survey_flights_dict, hotspots_query
 from noaadb.api.models import *
 from noaadb.schema.models import Chip, LabelChips
 
@@ -32,66 +32,7 @@ def hotspots_filter():
     if errors:
         abort(400, json.dumps(errors,indent=2))
 
-    species = aliased(Species)
-
-    query = db.session.query(Label)
-    if opts["image_type"] == "ir":  # IR Image
-        query = query.join(Hotspot, Hotspot.ir_label_id == Label.id)
-    else:                           # EO Image
-        query = query.join(Hotspot, Hotspot.eo_label_id == Label.id)
-
-    if not opts["show_shadows"]:
-        query = query.filter(not_(Label.is_shadow))
-    if not opts["show_removed_labels"]:
-        query = query.filter(Label.end_date == None)
-
-
-    # if opts["exclude_invalid_labels"]:
-    #     # If we exclude invalid labels it is a bit slower because we have to join with Image table
-    #     # to ensure it is in image bounds
-    #     invalid_filter_pre_join = or_(
-    #         Label.end_date != None,  # end_date exists if label was removed
-    #         Label.x1 < 0,  # out of bounds
-    #         Label.y1 < 0,  # out of bounds
-    #         Label.x1 == None,
-    #         Label.x2 == None,
-    #         Label.y1 == None,
-    #         Label.y2 == None
-    #     )
-    #     query = query.filter(not_(invalid_filter_pre_join))
-    #     query = query.join(NOAAImage, Label.image)
-    #     invalid_filter_post_join = or_(
-    #         Label.x2 > NOAAImage.width,  # out of bounds
-    #         Label.y2 > NOAAImage.height  # out of bounds
-    #     )
-    #     query = query.filter(not_(invalid_filter_post_join))
-
-    # Filter species
-    query = query.join(species, Label.species)
-    if len(opts["species_list"]) > 0:
-        query = query.filter(species.name.in_(opts["species_list"]))
-
-    query = query.join(Worker, Label.worker)
-    # Filter workers
-    if len(opts["workers"]) > 0:
-        query = query.filter(Worker.name.in_(opts["workers"]))
-
-    query = query.join(Job, Label.job)
-    # Filter jobs
-    if len(opts["jobs"]) > 0:
-        query = query.filter(Job.job_name.in_(opts["jobs"]))
-
-    if len(opts["surveys"]) > 0:
-        query = query.filter(NOAAImage.survey.in_(opts["surveys"]))
-
-    if len(opts["camera_positions"]) > 0:
-        query = query.filter(NOAAImage.cam_position.in_(opts["camera_positions"]))
-
-    if len(opts["flights"]) > 0:
-        query = query.filter(NOAAImage.flight.in_(opts["flights"]))
-
-    query.order_by(Label.image_id)
-
+    query=hotspots_query(opts)
     start = time.time()
     labels = query.all()
     print("Query time: %.4f" % (time.time() - start))

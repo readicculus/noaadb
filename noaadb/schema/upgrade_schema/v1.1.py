@@ -1,12 +1,8 @@
-from enum import Enum
-
-import numpy as np
 from sqlalchemy import create_engine, and_
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import DDL
 from noaadb import DATABASE_URI
 from noaadb.schema.models import Label, NOAAImage, ImageType, Hotspot, LabelChips, Chip, ImageDimension
-import cv2
 
 from scripts.util import printProgressBar
 
@@ -15,6 +11,7 @@ from scripts.util import printProgressBar
 engine = create_engine(DATABASE_URI, echo=False)
 
 engine.execute(DDL("CREATE SCHEMA IF NOT EXISTS chips"))
+
 
 LabelChips.__table__.drop(bind=engine, checkfirst=True)
 Chip.__table__.drop(bind=engine, checkfirst=True)

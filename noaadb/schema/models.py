@@ -13,6 +13,10 @@ class ImageType(enum.IntEnum):
     IR = 2
     UV = 3
 
+class MLType(enum.IntEnum):
+    TRAIN = 1
+    TEST = 2
+
 FILEPATH = VARCHAR(400)
 meta = MetaData()
 Base = declarative_base(metadata=meta)
@@ -250,3 +254,17 @@ class LabelChips(Base):
     def __repr__(self):
         return "<ChipHotspot(id='{}', relative_x1='{}', relative_x2='{}', relative_y1='{}', relative_y2='{}', chip_id='{}', label_id='{}', percent_intersection='{}')>" \
             .format(self.id, self.relative_x1, self.relative_x2, self.relative_y1, self.relative_y2, self.chip_id, self.label_id, self.percent_intersection)
+
+class TrainTestSplit(Base):
+    __tablename__ = 'train_test_split'
+    __table_args__ = {'schema': "ml"}
+    id = Column(Integer,
+                Sequence('train_test_seq', start=1, increment=1, metadata=meta, schema="ml"),
+                primary_key=True)
+    label_id = Column(Integer, ForeignKey("noaa_labels.labels.id"), nullable=False)
+    label = relationship('Label', foreign_keys=[label_id])
+    type = Column(ENUM(MLType, name="ml_type_enum", create_type=True), nullable=False)
+
+    def __repr__(self):
+        return "<TrainTestSplit(id='{}', label='{}', type='{}')>" \
+            .format(self.id, self.label, self.type)
