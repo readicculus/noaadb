@@ -8,7 +8,7 @@ from sqlalchemy.orm import validates, relationship, column_property
 from sqlalchemy.schema import CheckConstraint, Sequence
 from sqlalchemy.dialects.postgresql import ENUM
 
-class ImageType(enum.Enum):
+class ImageType(enum.IntEnum):
     RGB = 1
     IR = 2
     UV = 3
