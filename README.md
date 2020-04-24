@@ -19,6 +19,9 @@ View the JSON API specification at https://www.yuvalboss.com/api/
 The public api includes hardcoded readonly credentials.
 #### Use Python to query hotspots api endpoint
 ```
+import json
+import requests
+
 query_config = {
           "species_list": [
             "Polar Bear", "Bearded Seal"
