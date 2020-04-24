@@ -220,8 +220,14 @@ components:
           type: string
           required: 'false'
           default: eo
-          description: 'options: ''eo'' or ''ir'''
+          enum: [eo, ir]
           example: eo
+        ml_data_type:
+          type: string
+          required: false
+          default: all
+          enum: [train,test,all]
+          example: all
         show_shadows:
           type: boolean
           default: false
