@@ -17,6 +17,28 @@ View the JSON API specification at https://www.yuvalboss.com/api/
     └── README.md
 
 The public api includes hardcoded readonly credentials.
+#### Use Python to query hotspots api endpoint
+```
+query_config = {
+          "species_list": [
+            "Polar Bear", "Bearded Seal"
+          ],
+          "workers": [],
+          "jobs": [],
+          "surveys": [],
+          "flights": [],
+          "camera_positions": [],
+          "image_type": "eo",
+          "show_shadows": False,
+          "show_removed_labels": False
+        }
+API_ENDPOINT = "https://yuvalboss.com/api/hotspots"
+headers = {'Content-type': 'application/json'}
+r = requests.post(url = API_ENDPOINT, data = json.dumps(query_config), headers=headers)
+if r.status_code != 200:
+    raise Exception(r.text)
+json_response = json.loads(r.text)
+```
 
 #### Download data models
 Can install models to be used with api and all associate code as follows:
