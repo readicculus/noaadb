@@ -80,25 +80,25 @@ def hotspots_query(opts):
     if not opts["show_removed_labels"]:
         query = query.filter(Label.end_date == None)
 
-    # if opts["exclude_invalid_labels"]:
-    #     # If we exclude invalid labels it is a bit slower because we have to join with Image table
-    #     # to ensure it is in image bounds
-    #     invalid_filter_pre_join = or_(
-    #         Label.end_date != None,  # end_date exists if label was removed
-    #         Label.x1 < 0,  # out of bounds
-    #         Label.y1 < 0,  # out of bounds
-    #         Label.x1 == None,
-    #         Label.x2 == None,
-    #         Label.y1 == None,
-    #         Label.y2 == None
-    #     )
-    #     query = query.filter(not_(invalid_filter_pre_join))
-    #     query = query.join(NOAAImage, Label.image)
-    #     invalid_filter_post_join = or_(
-    #         Label.x2 > NOAAImage.width,  # out of bounds
-    #         Label.y2 > NOAAImage.height  # out of bounds
-    #     )
-    #     query = query.filter(not_(invalid_filter_post_join))
+    if opts["exclude_invalid_labels"]:
+        # If we exclude invalid labels it is a bit slower because we have to join with Image table
+        # to ensure it is in image bounds
+        invalid_filter_pre_join = or_(
+            Label.end_date != None,  # end_date exists if label was removed
+            Label.x1 < 0,  # out of bounds
+            Label.y1 < 0,  # out of bounds
+            Label.x1 == None,
+            Label.x2 == None,
+            Label.y1 == None,
+            Label.y2 == None
+        )
+        query = query.filter(not_(invalid_filter_pre_join))
+        query = query.join(NOAAImage, Label.image)
+        invalid_filter_post_join = or_(
+            Label.x2 > NOAAImage.width,  # out of bounds
+            Label.y2 > NOAAImage.height  # out of bounds
+        )
+        query = query.filter(not_(invalid_filter_post_join))
 
     # Filter species
     query = query.join(species, Label.species)
