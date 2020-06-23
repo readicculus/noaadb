@@ -132,8 +132,8 @@ class Sighting(Base):
     ir_label_id = Column(Integer, ForeignKey('noaa_surveys.ir_label.id'), nullable=True)
     eo_label_id = Column(Integer, ForeignKey('noaa_surveys.eo_label.id'), nullable=True)
 
-    ir_label = relationship("IRLabelEntry", foreign_keys=[ir_label_id])
-    eo_label = relationship("EOLabelEntry", foreign_keys=[eo_label_id])
+    ir_label = relationship("IRLabelEntry", foreign_keys=[ir_label_id], backref=backref('sightings', cascade='all,delete'))
+    eo_label = relationship("EOLabelEntry", foreign_keys=[eo_label_id], backref=backref('sightings', cascade='all,delete'))
 
     __table_args__ = ({'schema': "noaa_surveys"})
 
@@ -200,6 +200,13 @@ class LabelEntry(ConcreteBase, Base):
     def worker(cls):
         return relationship("Worker")
 
+    @declared_attr
+    def species_id(cls):
+        return Column(Integer, ForeignKey('noaa_surveys.species.id'), nullable=False)
+
+    @declared_attr
+    def species(cls):
+        return relationship("Species")
     # @declared_attr
     # def sighting_id(cls):
     #     return Column(Integer, ForeignKey('noaa_surveys.sightings.id'), nullable=False)
@@ -219,27 +226,16 @@ class LabelEntry(ConcreteBase, Base):
     start_date = Column(Date)
     end_date = Column(Date)
 
-
-
-    @property
-    def image_type(self):
-        if self.image is None:
-            return None
-        return self.image.type
-
     # @property
-    # def species(self):
-    #     return self.sighting.id
-    #
-    # @property
-    # def age_class(self):
-    #     return self.sighting.age_class
-
+    # def image_type(self):
+    #     if self.image is None:
+    #         return None
+    #     return self.image.type
 
     __table_args__ = (
         CheckConstraint('x1<=x2 AND y1<=y2',
                         name='bbox_valid'),
-        UniqueConstraint('confidence', 'x1', 'x2', 'y1', 'y2', 'image_id', name='_label_unique_constraint'),
+        UniqueConstraint('confidence', 'x1', 'x2', 'y1', 'y2', 'image_id', 'species_id', name='_label_unique_constraint'),
         {'schema': "noaa_surveys"}
         )
 
@@ -247,7 +243,8 @@ class LabelEntry(ConcreteBase, Base):
     discriminator = Column('label_type', ENUM(ImageType, name="im_type_enum", metadata=meta, schema="noaa_surveys", create_type=True))
     __mapper_args__ = {'polymorphic_on': discriminator,
                        'polymorphic_identity':ImageType.ALL,
-                       'with_polymorphic': '*'}
+                       # 'with_polymorphic': '*'
+                       }
 
 
     @validates('x1', 'x2', 'y1', 'y2')
@@ -266,50 +263,40 @@ class LabelEntry(ConcreteBase, Base):
                     self.start_date, self.end_date, self.worker_id, self.job_id)
 
 class IRLabelEntry(LabelEntry):
-    id = Column(Integer, ForeignKey('noaa_surveys.labels.id'), primary_key=True)
+    row_id = Column(Integer, primary_key=True,autoincrement=True)
+    id = Column(Integer, ForeignKey('noaa_surveys.labels.id', ondelete="CASCADE"), unique=True)
+
     __tablename__ = 'ir_label'
     __mapper_args__ = {
     'polymorphic_identity':ImageType.IR,
         'polymorphic_load': 'inline',
-                       'with_polymorphic': '*'}
+        'inherit_condition': id == LabelEntry.id,
+                       'with_polymorphic': '*'
+    }
 
     __table_args__ = (
         {'schema': "noaa_surveys"}
         )
+    # root = relationship(
+    #     'LabelEntry',
+    #     backref='ir_label', primaryjoin=LabelEntry.id == id, remote_side=LabelEntry.id)
 class EOLabelEntry(LabelEntry):
-    id = Column(Integer, ForeignKey('noaa_surveys.labels.id'), primary_key=True)
+    row_id = Column(Integer, primary_key=True,autoincrement=True)
+    id = Column(Integer, ForeignKey('noaa_surveys.labels.id', ondelete="CASCADE"),unique=True)
+
     __tablename__ = 'eo_label'
     __mapper_args__ = {
     'polymorphic_identity':ImageType.RGB,
         'polymorphic_load': 'inline',
-                       'with_polymorphic': '*'}
+        'inherit_condition': id == LabelEntry.id,
+        'with_polymorphic': '*'
+    }
     __table_args__ = (
         {'schema': "noaa_surveys"}
         )
-# class FalsePositive_IR_Labels(LabelEntry): __mapper_args__ = {
-#     'polymorphic_identity':DISCRIMINATOR.IR_FP,}
-# class FalsePositive_RGB_Labels(LabelEntry): __mapper_args__ = {
-#         'polymorphic_identity':DISCRIMINATOR.RGB_FP,}
-# class TruePositive_IR_Labels(LabelEntry):__mapper_args__ = {
-#         'polymorphic_identity':DISCRIMINATOR.IR_TP,}
-# class TruePositive_RGB_Labels(LabelEntry): __mapper_args__ = {
-#         'polymorphic_identity':DISCRIMINATOR.RGB_TP,}
-
-
-# class LabelEntryPairs(Base):
-#     # __abstract__ = True
-#     __tablename__ = 'label_pairs'
-#     id = Column(Integer, primary_key=True)
-#     a =  Column(TruePositiveLabels, ForeignKey('noaa_surveys.sightings.id'), nullable=False)
-#     b = Column(Integer)
-
-
-
-
-
-
-
-# eng_plus_manager = with_polymorphic(LabelEntry, [TruePositiveLabels, FalsePositiveLabels])
+    # root = relationship(
+    #     'LabelEntry',
+    #     backref='eo_label', primaryjoin=LabelEntry.id == id, remote_side=LabelEntry.id)
 # V1.1 Models
 
 class ImageDimension(Base):
@@ -439,3 +426,6 @@ class TrainTestSplit(Base):
     def __repr__(self):
         return "<TrainTestSplit(id='{}', label='{}', type='{}')>" \
             .format(self.id, self.label, self.type)
+
+
+TABLE_DEPENDENCY_ORDER = [FlightMeta,NOAAImage,Job,Worker,Species,Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, ImageDimension, Chip, LabelChipBase, LabelChips, FPChips, TrainTestSplit]

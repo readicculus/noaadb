@@ -1,5 +1,5 @@
 from noaadb.schema.models import NOAAImage, Species, Job, Worker, Sighting, \
-    Sighting, LabelEntry
+    Sighting, LabelEntry, IRLabelEntry, EOLabelEntry
 
 
 # filter queries
@@ -7,8 +7,15 @@ from noaadb.schema.models import NOAAImage, Species, Job, Worker, Sighting, \
 def unidentified_labels(q):
     return q.filter_by(hotspot_id=None)
 # Constrained gets
-def get_existing_label(session, label):
-    return session.query(LabelEntry).filter_by(image=label.image,
+def get_existing_eo_label(session, label):
+    return session.query(EOLabelEntry).filter_by(image=label.image,
+                                                       x1=label.x1,
+                                                       x2=label.x2,
+                                                       y1=label.y1,
+                                                       y2=label.y2).first()
+
+def get_existing_ir_label(session, label):
+    return session.query(IRLabelEntry).filter_by(image=label.image,
                                                        x1=label.x1,
                                                        x2=label.x2,
                                                        y1=label.y1,
