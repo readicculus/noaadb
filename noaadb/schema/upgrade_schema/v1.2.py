@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, and_
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import DDL
 from noaadb import DATABASE_URI
-from noaadb.api.server_utils import hotspots_query
+from noaadb.api.server_utils import labels_query
 from noaadb.schema.models import TrainTestSplit, MLType
 
 engine = create_engine(DATABASE_URI, echo=False)
@@ -32,7 +32,7 @@ filter_options = \
       "show_removed_labels": False,
       "ml_data_type": "all"
     }
-q = hotspots_query(filter_options)
+q = labels_query(filter_options)
 labels = q.all()
 total_species_count = {}
 image_label_dict = {}

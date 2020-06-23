@@ -3,7 +3,8 @@ from marshmallow.fields import List
 from marshmallow_sqlalchemy import auto_field
 
 from noaadb.api.config import db, ma
-from noaadb.schema.models import NOAAImage, Job, Worker, Species, Label, Hotspot, FalsePositives,LabelChips, Chip
+from noaadb.schema.models import NOAAImage, Job, Worker, Species, TruePositiveLabels, Sighting, FalsePositiveLabels, LabelChips, Chip, \
+    LabelChipBase, FPChips
 from marshmallow_sqlalchemy.fields import Nested
 
 class NOAAImageSchema(ma.SQLAlchemyAutoSchema):
@@ -44,7 +45,7 @@ species_schema = SpeciesSchema(many=True)
 
 class LabelSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
-        model = Label
+        model = TruePositiveLabels
         sqla_session = db.session
         include_fk = True
 
@@ -54,7 +55,7 @@ labels_schema = LabelSchema(many=True)
 
 class HotspotSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
-        model = Hotspot
+        model = Sighting
         sqla_session = db.session
     eo_label = Nested(LabelSchema())
     ir_label = Nested(LabelSchema())
@@ -65,7 +66,7 @@ hotspots_schema = HotspotSchema(many=True)
 
 class FalsePositivesSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
-        model = FalsePositives
+        model = FalsePositiveLabels
         sqla_session = db.session
 
 falsepositive_schema = FalsePositivesSchema()
@@ -85,5 +86,14 @@ class LabelChipSchema(ma.SQLAlchemyAutoSchema):
         model = LabelChips
         sqla_session = db.session
         fields = ("percent_intersection","relative_x1","relative_x2","relative_y1","relative_y2","chip_id")
+
 chiphotspot_schema = LabelChipSchema()
 chiphotspots_schema = LabelChipSchema(many=True)
+
+class FPChipSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = FPChips
+        sqla_session = db.session
+        fields = ("percent_intersection","relative_x1","relative_x2","relative_y1","relative_y2","chip_id")
+fpchip_schema = FPChipSchema()
+fpchips_schema = FPChipSchema(many=True)

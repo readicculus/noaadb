@@ -3,14 +3,15 @@ import hashlib
 import time
 
 from flask import request
-from sqlalchemy import not_, or_
+from sqlalchemy import not_, or_, and_
 from sqlalchemy.orm import aliased
 
 from noaadb.api.config import db
 from noaadb.api.models import label_schema, images_schema, labels_schema, jobs_schema, workers_schema, species_schema
-from noaadb.schema.models import NOAAImage, Job, Worker, Species, Label, Hotspot, TrainTestSplit, MLType
+from noaadb.schema.models import NOAAImage, Job, Worker, Species, TruePositiveLabels, Sighting, TrainTestSplit, MLType, ImageType, \
+    FPChips, Chip
 
-default_filter_options = \
+default_label_filter_options = \
     {
       "species_list": [
         "Ringed Seal",
@@ -31,12 +32,12 @@ default_filter_options = \
     }
 
 
-def validate_filter_opts(req):
+def validate_label_filter_opts(req):
     filter_params = {}
     errors = {}
-    for k in default_filter_options:
+    for k in default_label_filter_options:
         if not k in req:
-            filter_params[k] = default_filter_options[k]
+            filter_params[k] = default_label_filter_options[k]
         else:
             if k in ["show_shadows", "show_removed_labels","exclude_invalid_labels"]:
                 if isinstance(req[k], bool):
@@ -61,59 +62,76 @@ def get_all_images(unique_image_ids):
     images = db.session.query(NOAAImage).options(db.defer('meta')).filter(NOAAImage.id.in_(unique_image_ids)).all()
     return images
 
-def hotspots_query(opts):
+
+def false_positive_query(confidence, session=db.session, width=608, height=608):
+    chip = aliased(Chip)
+    query = session.query(FPChips)
+    query = query.join(chip, FPChips.chip_id == chip.id)
+    query = query.filter(and_(chip.width == width,chip.height == height))
+    query = query.join(FPChips.label)
+    if confidence != 0:
+        query = query.filter(TruePositiveLabels.confidence > confidence)
+    query = query.join(NOAAImage, TruePositiveLabels.image)
+    query = query.filter(NOAAImage.type == ImageType.RGB)
+    query.order_by(TruePositiveLabels.image_id)
+    return query
+
+def hs_query(opts):
+    pass
+
+def labels_query(opts):
     species = aliased(Species)
 
-    query = db.session.query(Label)
+    query = db.session.query(TruePositiveLabels)
     if opts["image_type"] == "ir":  # IR Image
-        query = query.join(Hotspot, Hotspot.ir_label_id == Label.id)
+        query = query.join(Sighting, Sighting.ir_label_id == TruePositiveLabels.id)
     else:  # EO Image
-        query = query.join(Hotspot, Hotspot.eo_label_id == Label.id)
+        query = query.join(Sighting, Sighting.eo_label_id == TruePositiveLabels.id)
 
     if not opts["ml_data_type"] == "all":
         type = MLType.TRAIN if opts["ml_data_type"] == "train" else MLType.TEST
-        query = query.join(TrainTestSplit, TrainTestSplit.label_id == Label.id)\
+        query = query.join(TrainTestSplit, TrainTestSplit.label_id == TruePositiveLabels.id)\
             .filter(TrainTestSplit.type == type)
 
     if not opts["show_shadows"]:
-        query = query.filter(not_(Label.is_shadow))
+        query = query.filter(not_(TruePositiveLabels.is_shadow))
     if not opts["show_removed_labels"]:
-        query = query.filter(Label.end_date == None)
+        query = query.filter(TruePositiveLabels.end_date == None)
 
     if opts["exclude_invalid_labels"]:
         # If we exclude invalid labels it is a bit slower because we have to join with Image table
         # to ensure it is in image bounds
         invalid_filter_pre_join = or_(
-            Label.end_date != None,  # end_date exists if label was removed
-            Label.x1 < 0,  # out of bounds
-            Label.y1 < 0,  # out of bounds
-            Label.x1 == None,
-            Label.x2 == None,
-            Label.y1 == None,
-            Label.y2 == None
+            TruePositiveLabels.end_date != None,  # end_date exists if label was removed
+            TruePositiveLabels.x1 < 0,  # out of bounds
+            TruePositiveLabels.y1 < 0,  # out of bounds
+            TruePositiveLabels.x1 == None,
+            TruePositiveLabels.x2 == None,
+            TruePositiveLabels.y1 == None,
+            TruePositiveLabels.y2 == None
         )
         query = query.filter(not_(invalid_filter_pre_join))
-        query = query.join(NOAAImage, Label.image)
+        query = query.join(NOAAImage, TruePositiveLabels.image)
         invalid_filter_post_join = or_(
-            Label.x2 > NOAAImage.width,  # out of bounds
-            Label.y2 > NOAAImage.height  # out of bounds
+            TruePositiveLabels.x2 > NOAAImage.width,  # out of bounds
+            TruePositiveLabels.y2 > NOAAImage.height  # out of bounds
         )
         query = query.filter(not_(invalid_filter_post_join))
 
     # Filter species
-    query = query.join(species, Label.species)
+    query = query.join(species, TruePositiveLabels.species)
     if len(opts["species_list"]) > 0:
         query = query.filter(species.name.in_(opts["species_list"]))
 
-    query = query.join(Worker, Label.worker)
+    query = query.join(Worker, TruePositiveLabels.worker)
     # Filter workers
     if len(opts["workers"]) > 0:
         query = query.filter(Worker.name.in_(opts["workers"]))
 
-    query = query.join(Job, Label.job)
+    query = query.join(Job, TruePositiveLabels.job)
     # Filter jobs
     if len(opts["jobs"]) > 0:
-        query = query.filter(Job.job_name.in_(opts["jobs"]))
+        query = query.filter(Job.name.in_(opts["jobs"]))
 
     if len(opts["surveys"]) > 0:
         query = query.filter(NOAAImage.survey.in_(opts["surveys"]))
@@ -124,7 +142,7 @@ def hotspots_query(opts):
     if len(opts["flights"]) > 0:
         query = query.filter(NOAAImage.flight.in_(opts["flights"]))
 
-    query.order_by(Label.image_id)
+    query.order_by(TruePositiveLabels.image_id)
     return query
 
 def is_valid_label(im, label):
@@ -160,16 +178,27 @@ def combind_images_labels_to_json(images, labels):
         res["labels"][label_im_id].append(label)
     return res
 
-def make_cache_key(*args, **kwargs):
+def make_hotspots_cache_key(*args, **kwargs):
     if not request.data:
         return ""
     payload = request.json
     if payload == None:
         return ""
-    opts, errors = validate_filter_opts(payload)
+    opts, errors = validate_label_filter_opts(payload)
     res = json.dumps({**opts, **errors} , sort_keys=True, separators=(',', ':'))
     hash_object = hashlib.sha1(res.encode('utf-8'))
     return hash_object.hexdigest()
+
+def make_array_cache_key(*args, **kwargs):
+    if not request.data:
+        return ""
+    payload = request.json
+    if payload == None:
+        return ""
+    res = json.dumps(payload)
+    hash_object = hashlib.sha1(res.encode('utf-8'))
+    return hash_object.hexdigest()
+
 
 def get_species_dict():
     species=db.session.query(Species).all()

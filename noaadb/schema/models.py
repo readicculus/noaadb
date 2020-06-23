@@ -1,36 +1,55 @@
 import enum
 
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.declarative import declarative_base, declared_attr, ConcreteBase, AbstractConcreteBase
 from sqlalchemy import Column, Date, VARCHAR, DateTime, BOOLEAN, ForeignKey, \
-    MetaData, Integer, UniqueConstraint, Float, JSON, func, event
+    MetaData, Integer, UniqueConstraint, Float, JSON, func, event, select, Unicode, String
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import validates, relationship, column_property
+from sqlalchemy.orm import validates, relationship, column_property, backref, aliased, with_polymorphic
 from sqlalchemy.schema import CheckConstraint, Sequence
 from sqlalchemy.dialects.postgresql import ENUM
-
+from sqlalchemy.orm.session import Session
 class ImageType(enum.IntEnum):
     RGB = 1
     IR = 2
-    UV = 3
+    ALL = 3
+
+class LabelType(enum.IntEnum):
+    TP = 1
+    FP = 2
 
 class MLType(enum.IntEnum):
     TRAIN = 1
     TEST = 2
 
+class DISCRIMINATOR(enum.IntEnum):
+    RGB_TP = 1
+    RGB_FP = 2
+    IR_TP = 3
+    IR_FP = 4
+
+
+
+JOBWORKERNAME = VARCHAR(50)
+FILENAME = VARCHAR(200)
 FILEPATH = VARCHAR(400)
 meta = MetaData()
 Base = declarative_base(metadata=meta)
+class FlightMeta(Base):
+    __tablename__ = 'flight_meta'
+    __table_args__ = {'schema': "noaa_surveys"}
+    # id = Column(Integer,
+    #             Sequence('flight_meta_seq', start=1, increment=1, metadata=meta, schema="noaa_surveys"),
+    #             primary_key=True)
+    file_name = Column(VARCHAR(200), nullable=False, unique=True, primary_key=True)
+    ins = Column(JSON)
+    evt = Column(JSON)
 
 class NOAAImage(Base):
-    __tablename__ = 'noaa_images'
-    __table_args__ = {'schema': "noaa_labels"}
-    abstract=True
-    id = Column(Integer,
-                Sequence('image_seq', start=1, increment=1, metadata=meta),
-                primary_key=True)
-    file_name = Column(VARCHAR(200), nullable=False, unique=True)
+    __tablename__ = 'images'
+    __table_args__ = {'schema': "noaa_surveys"}
+    file_name = Column(FILENAME, nullable=False, unique=True, primary_key=True)
     file_path = Column(FILEPATH, nullable=False, unique=True)
-    type = Column(ENUM(ImageType, name="im_type_enum", create_type=True), nullable=False)
+    type = Column(ENUM(ImageType, name="im_type_enum", metadata=meta, schema="noaa_surveys", create_type=True), nullable=False)
     foggy = Column(BOOLEAN)
     quality = Column(Integer)
     width = Column(Integer, nullable=False)
@@ -40,51 +59,59 @@ class NOAAImage(Base):
     survey = Column(VARCHAR(100))
     timestamp = Column(DateTime(timezone=True))
     cam_position = Column(VARCHAR(100))
-    meta = Column(JSON)
-    # image_dimension_id = Column(Integer, ForeignKey("im_to_image_dimensions.id"), nullable=False)
+
+    flight_meta_id = Column(FILENAME, ForeignKey("noaa_surveys.flight_meta.file_name", ondelete='CASCADE'))
+    flight_meta = relationship("FlightMeta", backref="images")
+
+    image_meta = Column(JSON)
+    # image_dimension_id = Column(Integer, ForeignKey("chips.image_dimensions.id"), nullable=False)
     # image_dimension = relationship("ImageDimensions")
+    __mapper_args__ = {'polymorphic_on': type}
 
     def __repr__(self):
-        return "<NOAAImage(id='{}', type='{}', foggy='{}', quality='{}', width='{}', height='{}', depth='{}', flight='{}', time='{}', file_name='{},'" \
+        return "<NOAAImage(name='{}', type='{}', foggy='{}', quality='{}', width='{}', height='{}', depth='{}', flight='{}', time='{}','" \
                " survey='{}', timestamp='{}', cam_position='{}')>" \
-            .format(self.id, self.type, self.foggy, self.quality, self.width, self.height, self.depth, self.flight, self.timestamp, self.file_name
+            .format(self.file_name, self.type, self.foggy, self.quality, self.width, self.height, self.depth, self.flight, self.timestamp
                     , self.survey, self.timestamp, self.cam_position)
 
+class EOImage(NOAAImage):
+    __mapper_args__ = {
+        'polymorphic_identity':ImageType.RGB,
+    }
+class IRImage(NOAAImage):
+    __mapper_args__ = {
+        'polymorphic_identity':ImageType.IR,
+    }
 
 
 class Job(Base):
     __tablename__ = 'jobs'
-    __table_args__ = {'schema': "noaa_labels"}
-    id = Column(Integer,
-                Sequence('job_seq', start=1, increment=1, metadata=meta),
-                primary_key=True)
-    job_name = Column(VARCHAR(100), nullable=False, unique=True)
+    __table_args__ = {'schema': "noaa_surveys"}
+    name = Column(JOBWORKERNAME, nullable=False, unique=True, primary_key=True)
     file_path = Column(FILEPATH, nullable=False)
     notes = Column(VARCHAR(500))
 
     def __repr__(self):
         return "<Job(id='{}', job_name='{}', notes='{}')>" \
-            .format(self.id, self.job_name, self.file_path, self.notes)
+            .format(self.name, self.file_path, self.notes)
 
 
 class Worker(Base):
     __tablename__ = 'workers'
-    __table_args__ = {'schema': "noaa_labels"}
-    id = Column(Integer, Sequence('worker_seq', start=1, increment=1, metadata=meta),
-                primary_key=True)
-    name = Column(VARCHAR(100), nullable=False, unique=True)
+    __table_args__ = {'schema': "noaa_surveys"}
+    name = Column(JOBWORKERNAME, nullable=False, unique=True, primary_key=True)
     human = Column(BOOLEAN, nullable=False)
 
     def __repr__(self):
-        return "<Worker(id='{}', name='{}', human='{}')>" \
-            .format(self.id, self.name, self.human)
+        return "<Worker(name='{}', human='{}')>" \
+            .format(self.name, self.human)
 
 
 class Species(Base):
     __tablename__ = 'species'
-    __table_args__ = {'schema': "noaa_labels"}
+    __table_args__ = {'schema': "noaa_surveys"}
     id = Column(Integer,
-                Sequence('species_seq', start=1, increment=1, metadata=meta),
+                Sequence('species_seq', start=1, increment=1, metadata=meta, schema="noaa_surveys"),
                 primary_key=True)
     name = Column(VARCHAR(100), nullable=False, unique=True)
 
@@ -92,39 +119,138 @@ class Species(Base):
         return "<Species(id='{}', name='{}')>" \
             .format(self.id, self.name)
 
-
-class Label(Base):
-    __tablename__ = 'labels'
+class Sighting(Base):
+    __tablename__ = 'sightings'
     id = Column(Integer,
-                Sequence('label_seq', start=1, increment=1, metadata=meta),
+                Sequence('sightings_seq', start=1, increment=1, metadata=meta, schema="noaa_surveys"),
                 primary_key=True)
-    image_id = Column(Integer, ForeignKey('noaa_labels.noaa_images.id'), nullable=False)
-    image = relationship("NOAAImage")
-    species_id = Column(Integer, ForeignKey('noaa_labels.species.id'), nullable=False)
+
+    hotspot_id = Column(VARCHAR(50))
+    species_id = Column(Integer, ForeignKey('noaa_surveys.species.id'), nullable=False)
     species = relationship("Species")
+    age_class = Column(VARCHAR(50))
+    ir_label_id = Column(Integer, ForeignKey('noaa_surveys.ir_label.id'), nullable=True)
+    eo_label_id = Column(Integer, ForeignKey('noaa_surveys.eo_label.id'), nullable=True)
+
+    ir_label = relationship("IRLabelEntry", foreign_keys=[ir_label_id])
+    eo_label = relationship("EOLabelEntry", foreign_keys=[eo_label_id])
+
+    __table_args__ = ({'schema': "noaa_surveys"})
+
+    discriminator = Column('label_type', ENUM(LabelType, name="label_type_enum", metadata=meta, schema="noaa_surveys", create_type=True))
+    __mapper_args__ = {'polymorphic_on': discriminator}
+
+    # labels = relationship("LabelEntry", back_populates="sighting", cascade="all, delete-orphan")#,cascade="all, delete, delete-orphan" )
+
+    def __repr__(self):
+        return "<Hotspots(id='{}', hotspot_id='{}', species_id='{}', age_class='{}')>" \
+            .format(self.id, self.hotspot_id, self.species_id, self.age_class)
+
+class FalsePositiveSightings(Sighting):
+    __mapper_args__ = {
+        'polymorphic_identity':LabelType.FP,
+    }
+class TruePositiveSighting(Sighting):
+    __mapper_args__ = {
+        'polymorphic_identity':LabelType.TP,
+    }
+
+
+
+# @event.listens_for(Session, 'after_flush')
+# def delete_tag_orphans(session, ctx):
+#     session.query(Sighting).\
+#         filter(~Sighting.labels.any()).\
+#         delete(synchronize_session=False)
+
+
+
+
+class LabelEntry(ConcreteBase, Base):
+    # __abstract__ = True
+    __tablename__ = 'labels'
+    # id = Column(Integer,
+    #             Sequence('label_seq', start=1, increment=1, metadata=meta, schema="noaa_surveys"),
+    #             primary_key=True)
+    id = Column(Integer, primary_key=True)
+    # @declared_attr
+    # def id(cls):
+    #     return Column(Integer, primary_key=True,autoincrement=True)
+
+    @declared_attr
+    def image_id(cls):
+        return Column(FILENAME, ForeignKey('noaa_surveys.images.file_name'), nullable=False)
+
+    @declared_attr
+    def image(cls):
+        return relationship("NOAAImage")
+
+    @declared_attr
+    def job_id(cls):
+        return Column(JOBWORKERNAME, ForeignKey('noaa_surveys.jobs.name'), nullable=False)
+    @declared_attr
+    def job(cls):
+        return relationship("Job")
+
+    @declared_attr
+    def worker_id(cls):
+        return Column(JOBWORKERNAME, ForeignKey('noaa_surveys.workers.name'), nullable=False)
+
+    @declared_attr
+    def worker(cls):
+        return relationship("Worker")
+
+    # @declared_attr
+    # def sighting_id(cls):
+    #     return Column(Integer, ForeignKey('noaa_surveys.sightings.id'), nullable=False)
+    #
+    # @declared_attr
+    # def sighting(cls):
+    #     return relationship("Sighting",back_populates="labels")
+
+    # sighting = relationship("Sighting",back_populates="labels", uselist=False)
     x1 = Column(Integer)
     x2 = Column(Integer)
     y1 = Column(Integer)
     y2 = Column(Integer)
-    age_class = Column(VARCHAR(50))
+
     confidence = Column(Float)
-    is_shadow = Column(BOOLEAN, nullable=False)
+    is_shadow = Column(BOOLEAN, nullable=True)
     start_date = Column(Date)
     end_date = Column(Date)
-    hotspot_id = Column(VARCHAR(50))
-    worker_id = Column(Integer, ForeignKey('noaa_labels.workers.id'), nullable=False)
-    worker = relationship("Worker")
-    job_id = Column(Integer, ForeignKey('noaa_labels.jobs.id'), nullable=False)
-    job = relationship("Job") #, lazy="joined"
+
+
+
+    @property
+    def image_type(self):
+        if self.image is None:
+            return None
+        return self.image.type
+
+    # @property
+    # def species(self):
+    #     return self.sighting.id
+    #
+    # @property
+    # def age_class(self):
+    #     return self.sighting.age_class
+
 
     __table_args__ = (
         CheckConstraint('x1<=x2 AND y1<=y2',
                         name='bbox_valid'),
-        UniqueConstraint('x1', 'x2', 'y1', 'y2', 'image_id', 'species_id', name='_label_unique_constraint'),
-        {'schema': "noaa_labels"}
+        UniqueConstraint('confidence', 'x1', 'x2', 'y1', 'y2', 'image_id', name='_label_unique_constraint'),
+        {'schema': "noaa_surveys"}
         )
 
-    @validates('x1','x2','y1','y2')
+
+    discriminator = Column('label_type', ENUM(ImageType, name="im_type_enum", metadata=meta, schema="noaa_surveys", create_type=True))
+    __mapper_args__ = {'polymorphic_on': discriminator,
+                       'polymorphic_identity':ImageType.ALL,
+                       'with_polymorphic': '*'}
+
+
+    @validates('x1', 'x2', 'y1', 'y2')
     def validate_bbox(self, key, f) -> str:
         if key == 'y2' and self.y2 is not None and self.y1 > f:
             raise ValueError('y1 > y2')
@@ -132,53 +258,58 @@ class Label(Base):
             raise ValueError('x1 > x2')
         return f
     def __repr__(self):
-        return "<Label(id='{}', image_id='{}', species_id='{}', x1='{}', x2='{}'," \
+        return "<Label(id='{}', image_id='{}', x1='{}', x2='{}'," \
                " y1='{}', y2='{}', age_class='{}', confidence='{}', is_shadow='{}', start_date='{}'," \
-               " end_date='{}', hotspot_id_id='{}', worker_id='{}', manifest='{}')>" \
-            .format(self.id, self.image_id, self.species_id, self.x1, self.x2, self.y1, self.y2,
-                    self.age_class, self.confidence, self.is_shadow, self.start_date, self.end_date, self.hotspot_id, self.worker_id, self.job_id)
+               " end_date='{}', worker_id='{}', manifest='{}')>" \
+            .format(self.id, self.image_id, self.x1, self.x2,
+                    self.y1, self.y2, self.age_class, self.confidence, self.is_shadow,
+                    self.start_date, self.end_date, self.worker_id, self.job_id)
 
+class IRLabelEntry(LabelEntry):
+    id = Column(Integer, ForeignKey('noaa_surveys.labels.id'), primary_key=True)
+    __tablename__ = 'ir_label'
+    __mapper_args__ = {
+    'polymorphic_identity':ImageType.IR,
+        'polymorphic_load': 'inline',
+                       'with_polymorphic': '*'}
 
-class Hotspot(Base):
-    __tablename__ = 'hotspots'
-    id = Column(Integer,
-                Sequence('hotspot_seq', start=1, increment=1, metadata=meta),
-                primary_key=True)
-    eo_label_id = Column(Integer, ForeignKey('noaa_labels.labels.id'), unique=True, nullable=True)
-    eo_label = relationship('Label', foreign_keys=[eo_label_id], lazy="joined")
-    ir_label_id = Column(Integer, ForeignKey('noaa_labels.labels.id'), unique=True, nullable=True)
-    ir_label = relationship('Label', foreign_keys=[ir_label_id], lazy="joined")
-    hs_id = Column(VARCHAR(50))
-    eo_accepted = Column(BOOLEAN, default=False)
-    ir_accepted = Column(BOOLEAN, default=False)
     __table_args__ = (
-        UniqueConstraint('eo_label_id', 'ir_label_id'),
-        {'schema': "noaa_labels"}
+        {'schema': "noaa_surveys"}
         )
-    def __repr__(self):
-        return "<Hotspots(id='{}', eo_label_id='{}', ir_label_id='{}', hs_id='{}', eo_finalized='{}', ir_finalized='{}')>" \
-            .format(self.id, self.eo_label_id, self.ir_label_id, self.hs_id, self.eo_accepted, self.ir_accepted)
-
-
-class FalsePositives(Base):
-    __tablename__ = 'falsepositives'
-    id = Column(Integer,
-                Sequence('fp_seq', start=1, increment=1, metadata=meta),
-                primary_key=True)
-    eo_label_id = Column(Integer, ForeignKey('noaa_labels.labels.id'), unique=True, nullable=True)
-    eo_label = relationship('Label', foreign_keys=[eo_label_id])
-    ir_label_id = Column(Integer, ForeignKey('noaa_labels.labels.id'), unique=True, nullable=True)
-    ir_label = relationship('Label', foreign_keys=[ir_label_id])
-    hs_id = Column(VARCHAR(50))
+class EOLabelEntry(LabelEntry):
+    id = Column(Integer, ForeignKey('noaa_surveys.labels.id'), primary_key=True)
+    __tablename__ = 'eo_label'
+    __mapper_args__ = {
+    'polymorphic_identity':ImageType.RGB,
+        'polymorphic_load': 'inline',
+                       'with_polymorphic': '*'}
     __table_args__ = (
-        UniqueConstraint('eo_label_id', 'ir_label_id'),
-        {'schema': "noaa_labels"}
+        {'schema': "noaa_surveys"}
         )
-    def __repr__(self):
-        return "<FalsePositives(id='{}', eo_label_id='{}', ir_label_id='{}', hs_id='{}'')>" \
-            .format(self.id, self.eo_label_id, self.ir_label_id, self.hs_id)
+# class FalsePositive_IR_Labels(LabelEntry): __mapper_args__ = {
+#     'polymorphic_identity':DISCRIMINATOR.IR_FP,}
+# class FalsePositive_RGB_Labels(LabelEntry): __mapper_args__ = {
+#         'polymorphic_identity':DISCRIMINATOR.RGB_FP,}
+# class TruePositive_IR_Labels(LabelEntry):__mapper_args__ = {
+#         'polymorphic_identity':DISCRIMINATOR.IR_TP,}
+# class TruePositive_RGB_Labels(LabelEntry): __mapper_args__ = {
+#         'polymorphic_identity':DISCRIMINATOR.RGB_TP,}
 
 
+# class LabelEntryPairs(Base):
+#     # __abstract__ = True
+#     __tablename__ = 'label_pairs'
+#     id = Column(Integer, primary_key=True)
+#     a =  Column(TruePositiveLabels, ForeignKey('noaa_surveys.sightings.id'), nullable=False)
+#     b = Column(Integer)
+
+
+
+
+
+
+
+# eng_plus_manager = with_polymorphic(LabelEntry, [TruePositiveLabels, FalsePositiveLabels])
 # V1.1 Models
 
 class ImageDimension(Base):
@@ -228,17 +359,41 @@ class Chip(Base):
         return "<Chip(id='{}', image_dimension='{}', width='{}', height='{}', overlap='{}', x1='{}', y1='{}', x2='{}', y2='{}')>" \
             .format(self.id, self.image_dimension, self.width, self.height, self.overlap, self.x1, self.y1, self.x2, self.y2)
 
-class LabelChips(Base):
-    __tablename__ = 'label_chips'
+
+class LabelChipBase(Base):
+    __abstract__=True
     __table_args__ = {'schema': "chips"}
-    id = Column(Integer,
-                Sequence('chip_hs_seq', start=1, increment=1, metadata=meta, schema="chips"),
-                primary_key=True)
-    chip_id = Column(Integer, ForeignKey("chips.chip.id"), nullable=False)
-    chip = relationship("Chip")
-    label_id = Column(Integer, ForeignKey("noaa_labels.labels.id"), nullable=False)
-    label = relationship('Label', foreign_keys=[label_id])
+
+    @declared_attr
+    def __tablename__(cls):
+        return cls.__name__.lower()
+
+    @declared_attr
+    def chip_id(cls):
+        return Column(Integer, ForeignKey("chips.chip.id"), nullable=False)
+
+    @declared_attr
+    def chip(cls):
+        return relationship("Chip")
+
+    @declared_attr
+    def label_id(cls):
+        return Column(Integer, ForeignKey("noaa_surveys.labels.id"), nullable=False)
+
+    @declared_attr
+    def label(cls):
+        return relationship('LabelEntry', foreign_keys=[cls.label_id])
+
+    @declared_attr
+    def image_id(cls):
+        return Column(FILENAME, ForeignKey("noaa_surveys.images.file_name"), nullable=False)
+
+    @declared_attr
+    def image(cls):
+        return relationship('NOAAImage', foreign_keys=[cls.image_id])
+
     percent_intersection = Column(Float, nullable=False)
+
     @hybrid_property
     def relative_x1(self): return self.label.x1 - self.chip.x1
 
@@ -251,9 +406,25 @@ class LabelChips(Base):
     @hybrid_property
     def relative_y2(self): return self.chip.height - (self.chip.y2 - self.label.y2)
 
+
+class LabelChips(LabelChipBase):
+    __tablename__ = 'label_chips'
+    __table_args__ = {'schema': "chips"}
+    id = Column(Integer,
+                Sequence('chip_hs_seq', start=1, increment=1, metadata=meta, schema="chips"),
+                primary_key=True)
+
     def __repr__(self):
         return "<ChipHotspot(id='{}', relative_x1='{}', relative_x2='{}', relative_y1='{}', relative_y2='{}', chip_id='{}', label_id='{}', percent_intersection='{}')>" \
             .format(self.id, self.relative_x1, self.relative_x2, self.relative_y1, self.relative_y2, self.chip_id, self.label_id, self.percent_intersection)
+
+class FPChips(LabelChipBase):
+    __tablename__ = 'fp_chips'
+    __table_args__ = {'schema': "chips"}
+    id = Column(Integer,
+                Sequence('fp_chips_seq', start=1, increment=1, metadata=meta, schema="chips"),
+                primary_key=True)
+
 
 class TrainTestSplit(Base):
     __tablename__ = 'train_test_split'
@@ -261,9 +432,9 @@ class TrainTestSplit(Base):
     id = Column(Integer,
                 Sequence('train_test_seq', start=1, increment=1, metadata=meta, schema="ml"),
                 primary_key=True)
-    label_id = Column(Integer, ForeignKey("noaa_labels.labels.id"), nullable=False)
-    label = relationship('Label', foreign_keys=[label_id])
-    type = Column(ENUM(MLType, name="ml_type_enum", create_type=True), nullable=False)
+    label_id = Column(Integer, ForeignKey("noaa_surveys.labels.id"), nullable=False)
+    label = relationship('LabelEntry', foreign_keys=[label_id])
+    type = Column(ENUM(MLType, name="ml_type_enum", metadata=meta, schema="ml", create_type=True), nullable=False)
 
     def __repr__(self):
         return "<TrainTestSplit(id='{}', label='{}', type='{}')>" \

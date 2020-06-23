@@ -1,4 +1,5 @@
-from noaadb.schema.models import NOAAImage, Species, Job, Worker, Label, Hotspot, FalsePositives
+from noaadb.schema.models import NOAAImage, Species, Job, Worker, Sighting, \
+    Sighting, LabelEntry
 
 
 # filter queries
@@ -7,19 +8,18 @@ def unidentified_labels(q):
     return q.filter_by(hotspot_id=None)
 # Constrained gets
 def get_existing_label(session, label):
-    return session.query(Label).filter_by(image=label.image,
-                                          species=label.species,
-                                          x1=label.x1,
-                                          x2=label.x2,
-                                          y1=label.y1,
-                                          y2=label.y2).first()
+    return session.query(LabelEntry).filter_by(image=label.image,
+                                                       x1=label.x1,
+                                                       x2=label.x2,
+                                                       y1=label.y1,
+                                                       y2=label.y2).first()
 
-def get_existing_hotspot(session, hs):
-    return session.query(Hotspot).filter_by(eo_label=hs.eo_label,
-                                          ir_label=hs.ir_label).first()
-def get_existing_falsepositive(session, hs):
-    return session.query(FalsePositives).filter_by(eo_label=hs.eo_label,
-                                          ir_label=hs.ir_label).first()
+def get_existing_sighting(session, sighting):
+    return session.query(Sighting).filter_by(eo_label=sighting.eo_label,
+                                             ir_label=sighting.ir_label).first()
+# def get_existing_falsepositive(session, hs):
+#     return session.query(FalsePositiveLabels).filter_by(eo_label=hs.eo_label,
+#                                                         ir_label=hs.ir_label).first()
 
 
 # Get queries
@@ -30,7 +30,7 @@ def get_species(session, name):
     return  session.query(Species).filter_by(name=name).first()
 
 def get_job_by_name(session, job_name):
-    return  session.query(Job).filter_by(job_name=job_name).first()
+    return  session.query(Job).filter_by(name=job_name).first()
 
 def get_worker(session, name):
     return  session.query(Worker).filter_by(name=name).first()
@@ -47,14 +47,14 @@ def species_exists(session, name):
     return session.query(session.query(Species).filter_by(name=name).exists()).scalar()
 
 def job_exists(session, job_name):
-    return session.query(session.query(Job).filter_by(job_name=job_name).exists()).scalar()
+    return session.query(session.query(Job).filter_by(name=job_name).exists()).scalar()
 
 def worker_exists(session, name):
     return session.query(session.query(Worker).filter_by(name=name).exists()).scalar()
 
 def label_exists(session, label):
-    return session.query(session.query(Label)
-                         .filter(Label.hotspot_id.like(str(label.hotspot_id)))
+    return session.query(session.query(LabelEntry)
+                         .filter(LabelEntry.hotspot_id.like(str(label.hotspot_id)))
                          .filter_by(image=label.image,
                                     species=label.species,
                                     x1=label.x1,
@@ -66,7 +66,7 @@ def add_job_if_not_exists(session, name, path):
     j = get_job_by_name(session, name)
     if not job_exists(session, name):
         j = Job(
-            job_name=name,
+            name=name,
             file_path=path,
             notes=""
         )
