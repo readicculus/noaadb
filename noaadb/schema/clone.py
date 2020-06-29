@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 # (postgresql)
 from noaadb import DATABASE_URI
 from noaadb.schema.models import TABLE_DEPENDENCY_ORDER, Base, Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, \
-    ImageDimension, Chip, LabelChipBase, LabelChips, FPChips, TrainTestSplit
+    ImageDimension, Chip, LabelChipBase, LabelChips, FPChips, TrainTestSplit, NOAAImage, Job, Worker, Species
 from noaadb.schema.schema_ops import drop_schema, create_schema
 from scripts.util import printProgressBar
 
@@ -59,14 +59,13 @@ def copy_table(src_session, src_class, dst_session, dst_class):
     for a in missing_cols:
         print("%s not in dest %s" % (a,dst_class().__table__.name))
 
-
-for table in TABLE_DEPENDENCY_ORDER:
+for table in  [NOAAImage,Job,Worker,Species,Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, ImageDimension, Chip, LabelChipBase, LabelChips, FPChips, TrainTestSplit]:
     # disable_constrain = "ALTER TABLE {0} DISABLE TRIGGER ALL;".format(table.__table__.fullname)
     # enable_constrain = "ALTER TABLE {0} ENABLE TRIGGER ALL;".format(table.__table__.fullname)
     # dest_engine.execute("SET search_path TO %s" % os.environ["R_DB_NAME"])
     # dest_engine.execute(DDL(disable_constrain))
-    dest_engine.execute(DDL("set session_replication_role = 'replica';"))
+    dest_engine.execute(DDL("set session_replication_role = replica;"))
     copy_table(sourceSession, table, destSession, table)
     destSession.commit()
     # dest_engine.execute(DDL(enable_constrain))
-    dest_engine.execute(DDL("set session_replication_role = 'default';"))
+    dest_engine.execute(DDL("set session_replication_role = DEFAULT;"))

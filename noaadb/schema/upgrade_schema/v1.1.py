@@ -2,9 +2,8 @@ from sqlalchemy import create_engine, and_
 from sqlalchemy.orm import sessionmaker, aliased
 from sqlalchemy import DDL, func
 from noaadb import DATABASE_URI
-from noaadb.api.server_utils import false_positive_query
-from noaadb.schema.models import TruePositiveLabels, NOAAImage, ImageType, Sighting, LabelChips, Chip, ImageDimension, Species, \
-    FPChips
+from noaadb.schema.models import NOAAImage, ImageType, Sighting, LabelChips, Chip, ImageDimension, Species, \
+    FPChips, LabelEntry, EOLabelEntry, FalsePositiveSightings, TruePositiveSighting
 
 from scripts.util import printProgressBar
 
@@ -15,14 +14,14 @@ engine = create_engine(DATABASE_URI, echo=False)
 engine.execute(DDL("CREATE SCHEMA IF NOT EXISTS chips"))
 
 
-LabelChips.__table__.drop(bind=engine, checkfirst=True)
-FPChips.__table__.drop(bind=engine, checkfirst=True)
-Chip.__table__.drop(bind=engine, checkfirst=True)
-ImageDimension.__table__.drop(bind=engine, checkfirst=True)
-ImageDimension.__table__.create(bind=engine)
-Chip.__table__.create(bind=engine)
-FPChips.__table__.create(engine)
-LabelChips.__table__.create(engine)
+# LabelChips.__table__.drop(bind=engine, checkfirst=True)
+# FPChips.__table__.drop(bind=engine, checkfirst=True)
+# Chip.__table__.drop(bind=engine, checkfirst=True)
+# ImageDimension.__table__.drop(bind=engine, checkfirst=True)
+# ImageDimension.__table__.create(bind=engine)
+# Chip.__table__.create(bind=engine)
+# FPChips.__table__.create(engine)
+# LabelChips.__table__.create(engine)
 
 # create session
 Session = sessionmaker(bind=engine)
@@ -62,15 +61,20 @@ image_dims = {}
 for image in images:
     key = "%dx%d" % (image.width, image.height)
     if not key in image_dims:
-        im_dim = ImageDimension(
-            width=image.width,
-            height=image.height
-        )
-        session.add(im_dim)
+        im_dim = session.query(ImageDimension).filter(
+            and_(ImageDimension.width==image.width, ImageDimension.height==image.height)
+        ).first()
+        if im_dim is None:
+            im_dim = ImageDimension(
+                width=image.width,
+                height=image.height
+            )
+            session.add(im_dim)
         image_dims[key] = im_dim
     session.flush()
 
-cw,ch,co = [416,608,832,1248, 1664], [416, 608,832,1248, 1664], [120, 120,120,120]
+# cw,ch,co = [416,608,832,1248, 1664], [416, 608,832,1248, 1664], [120, 120,120,120]
+cw,ch,co = [608,832], [608,832], [120, 120]
 for k in image_dims:
     dims = image_dims[k]
     print("Image %dx%d:" % (dims.width,dims.height))
@@ -113,18 +117,22 @@ def assign_chips_for_labels(labels):
         chips_containing_partial__label = session.query(Chip).filter(Chip.image_dimension_id == im_dim.id) \
             .filter(and_(Chip.x1 <= label.x2, label.x1 <= Chip.x2,Chip.y1 <= label.y2, label.y1 <= Chip.y2)) \
             .all()
-        added += len(chips_containing_partial__label)
         for chip in chips_containing_partial__label:
-            ch = LabelChips(label=label, chip=chip, image=label.image, percent_intersection=percent_on(chip,label))
+            po = percent_on(chip,label)
+            if po is None or po < .1:
+                continue
+            ch = LabelChips(label=label, chip=chip,  percent_intersection=po)
             session.add(ch)
+            added+=1
         if i % 100 == 0:
             printProgressBar(i, total, prefix='Progress:', suffix=' - added %d rows' % (added), length=70, printEnd="")
-        if i % 500 == 0:
+        if i % 2000 == 0:
             session.commit()
     session.commit()
 
 def assign_chips_for_fps(fps):
-    chips_with_labels = session.query(LabelChips.chip_id, LabelChips.image_id).distinct().all()
+    label = aliased(EOLabelEntry)
+    chips_with_labels = session.query(LabelChips.chip_id, label.image_id).join(label, LabelChips.label).distinct().all()
     im_chips_used = {}
     for cid,imid in chips_with_labels:
         if imid not in im_chips_used:
@@ -134,7 +142,7 @@ def assign_chips_for_fps(fps):
     added = 0
     image_has_legit_labels = 0
     for i, fp in enumerate(fps):
-        label_already_in_image_chips = im_chips_used[fp.image.id] if fp.image.id in im_chips_used else []
+        label_already_in_image_chips = im_chips_used[fp.image_id] if fp.image_id in im_chips_used else []
         im_w = fp.image.width
         im_h = fp.image.height
         chips_fully_containing_fp = session.query(Chip)\
@@ -153,38 +161,28 @@ def assign_chips_for_fps(fps):
             if chip.width in chip_sizes_added:
                 continue  # only one entry per chip size per fp
             chip_sizes_added.append(chip.width)
-            ch = FPChips(label=fp, chip=chip, image=fp.image, percent_intersection=percent_on(chip,fp))
+            po = percent_on(chip,fp)
+            if po is None or po < .3:
+                continue
+            ch = FPChips(label=fp, chip=chip, percent_intersection=po)
             session.add(ch)
         if i % 100 == 0:
-            printProgressBar(i, total, prefix='Progress:', suffix='%d/%d Complete - added %d rows - %d in ims w/legit labels' % (i, total, added, image_has_legit_labels), length=70, printEnd="")
-        if i % 500 == 0:
+            printProgressBar(i, total, prefix='Progress:', suffix='Complete - added %d rows - %d in ims w/legit labels' % (i, total, added, image_has_legit_labels), length=70, printEnd="")
+        if i % 2000 == 0:
             session.commit()
+            session.flush()
         x=1
     session.commit()
+    session.flush()
 
 
 # Populate ChipHotspot Table
-species = aliased(Species)
-query = session.query(TruePositiveLabels)
-query = query.join(species, species.id == TruePositiveLabels.species_id)
-query = query.filter(species.name != 'false positive')
-query = query.join(NOAAImage, TruePositiveLabels.image)
-query = query.filter(NOAAImage.type == ImageType.RGB)
-labels = query.all()
-# fp_labels = false_positive_query(0.0, session=session).all()
-assign_chips_for_labels(labels)
+# tp_sightings = session.query(EOLabelEntry)\
+#     .join(TruePositiveSighting,TruePositiveSighting.eo_label_id == EOLabelEntry.id).all()
+# assign_chips_for_labels(tp_sightings)
 
-query = session.query(TruePositiveLabels)
-query = query.join(species, species.id == TruePositiveLabels.species_id)
-query = query.filter(species.name == 'false positive')
-query = query.join(NOAAImage, TruePositiveLabels.image)
-query = query.filter(NOAAImage.type == ImageType.RGB)
-labels = query.all()
-assign_chips_for_fps(labels)
-
-# labels = session.query(Label).join(Hotspot, Hotspot.eo_label_id == Label.id)\
-#     .join(NOAAImage, Label.image_id == NOAAImage.id).join(Label.species)\
-#     .filter(NOAAImage.type == ImageType.RGB).all()
-# assign_chips_for_labels(labels)
+fp_sightings = session.query(EOLabelEntry)\
+    .join(FalsePositiveSightings,FalsePositiveSightings.eo_label_id == EOLabelEntry.id).all()
+assign_chips_for_fps(fp_sightings)
 
 # Check for those not found

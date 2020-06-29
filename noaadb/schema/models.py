@@ -1,8 +1,10 @@
 import enum
+from operator import and_
 
 from sqlalchemy.ext.declarative import declarative_base, declared_attr, ConcreteBase, AbstractConcreteBase
 from sqlalchemy import Column, Date, VARCHAR, DateTime, BOOLEAN, ForeignKey, \
-    MetaData, Integer, UniqueConstraint, Float, JSON, func, event, select, Unicode, String
+    MetaData, Integer, UniqueConstraint, Float, JSON, func, event, select, Unicode, String, BigInteger, \
+    ForeignKeyConstraint
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import validates, relationship, column_property, backref, aliased, with_polymorphic
 from sqlalchemy.schema import CheckConstraint, Sequence
@@ -11,7 +13,8 @@ from sqlalchemy.orm.session import Session
 class ImageType(enum.IntEnum):
     RGB = 1
     IR = 2
-    ALL = 3
+    FUSED = 3
+    ALL = 4
 
 class LabelType(enum.IntEnum):
     TP = 1
@@ -21,12 +24,9 @@ class MLType(enum.IntEnum):
     TRAIN = 1
     TEST = 2
 
-class DISCRIMINATOR(enum.IntEnum):
-    RGB_TP = 1
-    RGB_FP = 2
-    IR_TP = 3
-    IR_FP = 4
-
+class FM_HEADER_FRAME_ID_TYPE(enum.IntEnum):
+    ins_evt = 1
+    ins = 2
 
 
 JOBWORKERNAME = VARCHAR(50)
@@ -34,36 +34,120 @@ FILENAME = VARCHAR(200)
 FILEPATH = VARCHAR(400)
 meta = MetaData()
 Base = declarative_base(metadata=meta)
-class FlightMeta(Base):
-    __tablename__ = 'flight_meta'
-    __table_args__ = {'schema': "noaa_surveys"}
-    # id = Column(Integer,
-    #             Sequence('flight_meta_seq', start=1, increment=1, metadata=meta, schema="noaa_surveys"),
-    #             primary_key=True)
-    file_name = Column(VARCHAR(200), nullable=False, unique=True, primary_key=True)
-    ins = Column(JSON)
-    evt = Column(JSON)
+class FlightCamId(Base): # TODO read https://avacariu.me/writing/2019/composite-foreign-keys-and-many-to-many-relationships-in-sqlalchemy
+    __tablename__ = 'flight_cam_meta'
+    flight = Column(String(20), primary_key=True)
+    cam = Column(String(20), primary_key=True)
+    survey = Column(String(20), primary_key=True)
+    __table_args__ = (
+        {'schema': "noaa_surveys"}
+    )
+
+
+class FlightMetaHeader(Base):
+    __tablename__ = 'header_meta'
+    stamp = Column(BigInteger, primary_key=True)
+    frame_id = Column(VARCHAR(10))
+    seq = Column(Integer)
+    flight = Column(String(20), nullable=False)
+    cam = Column(String(20), nullable=False)
+    survey = Column(String(20), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint([flight, cam, survey], [FlightCamId.flight, FlightCamId.cam, FlightCamId.survey],
+                             onupdate="CASCADE", ondelete="CASCADE"),
+        {'schema': "flight_meta"}
+    )
+
+class FlightMetaInstruments(Base):
+    __tablename__ = 'ins_meta'
+    id = Column(Integer, autoincrement=True, primary_key=True)
+    track_angle = Column(Float)
+    angular_rate_x = Column(Float)
+    angular_rate_y = Column(Float)
+    angular_rate_z = Column(Float)
+    down_velocity = Column(Float)
+    pitch = Column(Float)
+    altitude = Column(Float)
+    north_velocity = Column(Float)
+    acceleration_y = Column(Float)
+    gnss_status = Column(Integer)
+    longitude = Column(Float)
+    roll = Column(Float)
+    acceleration_x = Column(Float)
+    align_status = Column(Integer)
+    total_speed = Column(Float)
+    time = Column(Float)
+    latitude = Column(Float)
+    heading = Column(Float)
+    east_velocity = Column(Float)
+    acceleration_z = Column(Float)
+    header_id = Column(BigInteger, ForeignKey("flight_meta.header_meta.stamp"))
+    meta_header = relationship("FlightMetaHeader")
+    flight = Column(String(20), nullable=False)
+    cam = Column(String(20), nullable=False)
+    survey = Column(String(20), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint([flight, cam, survey], [FlightCamId.flight, FlightCamId.cam, FlightCamId.survey],
+                             onupdate="CASCADE", ondelete="CASCADE"),
+        {'schema': "flight_meta"}
+    )
+
+
+
+class FlightMetaEvent(Base):
+    __tablename__ = 'evt_meta'
+    id = Column(Integer, autoincrement=True, primary_key=True)
+    event_port = Column(Integer)
+    event_num = Column(Integer)
+    time = Column(Float)
+    header_id = Column(BigInteger, ForeignKey("flight_meta.header_meta.stamp"))
+    meta_header = relationship("FlightMetaHeader")
+    flight = Column(String(20), nullable=False)
+    cam = Column(String(20), nullable=False)
+    survey = Column(String(20), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint([flight, cam, survey], [FlightCamId.flight, FlightCamId.cam, FlightCamId.survey],
+                             onupdate="CASCADE", ondelete="CASCADE"),
+        {'schema': "flight_meta"}
+    )
+
+    meta_header = relationship("FlightMetaHeader")
+
 
 class NOAAImage(Base):
     __tablename__ = 'images'
-    __table_args__ = {'schema': "noaa_surveys"}
-    file_name = Column(FILENAME, nullable=False, unique=True, primary_key=True)
-    file_path = Column(FILEPATH, nullable=False, unique=True)
+    file_name = Column(FILEPATH, primary_key=True)
+    file_path = Column(FILEPATH, nullable=False)
     type = Column(ENUM(ImageType, name="im_type_enum", metadata=meta, schema="noaa_surveys", create_type=True), nullable=False)
     foggy = Column(BOOLEAN)
     quality = Column(Integer)
     width = Column(Integer, nullable=False)
     height = Column(Integer, nullable=False)
     depth = Column(Integer, nullable=False)
-    flight = Column(VARCHAR(50))
-    survey = Column(VARCHAR(100))
     timestamp = Column(DateTime(timezone=True))
-    cam_position = Column(VARCHAR(100))
 
-    flight_meta_id = Column(FILENAME, ForeignKey("noaa_surveys.flight_meta.file_name", ondelete='CASCADE'))
-    flight_meta = relationship("FlightMeta", backref="images")
+    is_bigendian = Column(BOOLEAN)
+    step = Column(Integer)
+    encoding = Column(VARCHAR(20))
+    header_id = Column(BigInteger, ForeignKey("flight_meta.header_meta.stamp"))
+    meta_header = relationship("FlightMetaHeader")
+    ins_id = Column(Integer, ForeignKey("flight_meta.ins_meta.id"))
+    meta_instrument = relationship("FlightMetaInstruments")
+    evt_id = Column(Integer, ForeignKey("flight_meta.evt_meta.id"))
+    meta_evt = relationship("FlightMetaEvent")
 
-    image_meta = Column(JSON)
+    flight = Column(String(20), nullable=False)
+    cam = Column(String(20), nullable=False)
+    survey = Column(String(20), nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint([flight, cam, survey], [FlightCamId.flight, FlightCamId.cam, FlightCamId.survey],
+                             onupdate="CASCADE", ondelete="CASCADE"),
+        {'schema': "noaa_surveys"}
+    )
+
     # image_dimension_id = Column(Integer, ForeignKey("chips.image_dimensions.id"), nullable=False)
     # image_dimension = relationship("ImageDimensions")
     __mapper_args__ = {'polymorphic_on': type}
@@ -365,19 +449,19 @@ class LabelChipBase(Base):
 
     @declared_attr
     def label_id(cls):
-        return Column(Integer, ForeignKey("noaa_surveys.labels.id"), nullable=False)
+        return Column(Integer, ForeignKey("noaa_surveys.eo_label.id"), nullable=False)
 
     @declared_attr
     def label(cls):
-        return relationship('LabelEntry', foreign_keys=[cls.label_id])
+        return relationship('EOLabelEntry', foreign_keys=[cls.label_id])
 
-    @declared_attr
-    def image_id(cls):
-        return Column(FILENAME, ForeignKey("noaa_surveys.images.file_name"), nullable=False)
-
-    @declared_attr
-    def image(cls):
-        return relationship('NOAAImage', foreign_keys=[cls.image_id])
+    # @declared_attr
+    # def image_id(cls):
+    #     return Column(FILENAME, ForeignKey("noaa_surveys.images.file_name"), nullable=False)
+    #
+    # @declared_attr
+    # def image(cls):
+    #     return relationship('NOAAImage', foreign_keys=[cls.image_id])
 
     percent_intersection = Column(Float, nullable=False)
 
@@ -428,4 +512,4 @@ class TrainTestSplit(Base):
             .format(self.id, self.label, self.type)
 
 
-TABLE_DEPENDENCY_ORDER = [FlightMeta,NOAAImage,Job,Worker,Species,Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, ImageDimension, Chip, LabelChipBase, LabelChips, FPChips, TrainTestSplit]
+TABLE_DEPENDENCY_ORDER = [FlightMetaHeader,FlightMetaEvent, FlightMetaInstruments, NOAAImage,Job,Worker,Species,Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, ImageDimension, Chip, LabelChipBase, LabelChips, FPChips, TrainTestSplit]

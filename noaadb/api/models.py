@@ -3,8 +3,8 @@ from marshmallow.fields import List
 from marshmallow_sqlalchemy import auto_field
 
 from noaadb.api.config import db, ma
-from noaadb.schema.models import NOAAImage, Job, Worker, Species, TruePositiveLabels, Sighting, FalsePositiveLabels, LabelChips, Chip, \
-    LabelChipBase, FPChips
+from noaadb.schema.models import NOAAImage, Job, Worker, Species, Sighting, LabelChips, Chip, \
+    LabelChipBase, FPChips, LabelEntry
 from marshmallow_sqlalchemy.fields import Nested
 
 class NOAAImageSchema(ma.SQLAlchemyAutoSchema):
@@ -45,7 +45,7 @@ species_schema = SpeciesSchema(many=True)
 
 class LabelSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
-        model = TruePositiveLabels
+        model = LabelEntry
         sqla_session = db.session
         include_fk = True
 
@@ -66,7 +66,7 @@ hotspots_schema = HotspotSchema(many=True)
 
 class FalsePositivesSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
-        model = FalsePositiveLabels
+        model = LabelEntry
         sqla_session = db.session
 
 falsepositive_schema = FalsePositivesSchema()
