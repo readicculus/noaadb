@@ -48,16 +48,16 @@ def get_all_species(session):
 
 # exists queries
 def image_exists(session, name):
-    return session.query(session.query(NOAAImage).filter_by(file_name=name).exists()).scalar()
+    return session.query(session.query(NOAAImage).filter_by(file_name=name).deleted()).scalar()
 
 def species_exists(session, name):
-    return session.query(session.query(Species).filter_by(name=name).exists()).scalar()
+    return session.query(session.query(Species).filter_by(name=name).deleted()).scalar()
 
 def job_exists(session, job_name):
-    return session.query(session.query(Job).filter_by(name=job_name).exists()).scalar()
+    return session.query(session.query(Job).filter_by(name=job_name).deleted()).scalar()
 
 def worker_exists(session, name):
-    return session.query(session.query(Worker).filter_by(name=name).exists()).scalar()
+    return session.query(session.query(Worker).filter_by(name=name).deleted()).scalar()
 
 def label_exists(session, label):
     return session.query(session.query(LabelEntry)
@@ -67,7 +67,7 @@ def label_exists(session, label):
                                     x1=label.x1,
                                     x2=label.x2,
                                     y1=label.y1,
-                                    y2=label.y2).exists()).scalar()
+                                    y2=label.y2).deleted()).scalar()
 
 def add_job_if_not_exists(session, name, path):
     j = get_job_by_name(session, name)

@@ -1,10 +1,11 @@
 import enum
 from operator import and_
 
-from sqlalchemy.ext.declarative import declarative_base, declared_attr, ConcreteBase, AbstractConcreteBase
+from sqlalchemy.ext.declarative import declarative_base, declared_attr, ConcreteBase, AbstractConcreteBase, \
+    DeferredReflection
 from sqlalchemy import Column, Date, VARCHAR, DateTime, BOOLEAN, ForeignKey, \
     MetaData, Integer, UniqueConstraint, Float, JSON, func, event, select, Unicode, String, BigInteger, \
-    ForeignKeyConstraint
+    ForeignKeyConstraint, Index
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import validates, relationship, column_property, backref, aliased, with_polymorphic
 from sqlalchemy.schema import CheckConstraint, Sequence
@@ -39,6 +40,18 @@ class FlightCamId(Base): # TODO read https://avacariu.me/writing/2019/composite-
     flight = Column(String(20), primary_key=True)
     cam = Column(String(20), primary_key=True)
     survey = Column(String(20), primary_key=True)
+    # header_children = relationship("FlightMetaHeader",
+    #                 cascade="all, delete-orphan",
+    #                 passive_deletes=True)
+    # ins_children = relationship("FlightMetaInstruments",
+    #                 cascade="all, delete-orphan",
+    #                 passive_deletes=True)
+    # evt_children = relationship("FlightMetaEvent",
+    #                 cascade="all, delete-orphan",
+    #                 passive_deletes=True)
+    # img_children = relationship("NOAAImage",
+    #                 cascade="all, delete-orphan",
+    #                 passive_deletes=True)
     __table_args__ = (
         {'schema': "noaa_surveys"}
     )
@@ -54,8 +67,9 @@ class FlightMetaHeader(Base):
     survey = Column(String(20), nullable=False)
 
     __table_args__ = (
+        Index('hm_flidx', 'flight', 'cam', 'survey'),
         ForeignKeyConstraint([flight, cam, survey], [FlightCamId.flight, FlightCamId.cam, FlightCamId.survey],
-                             onupdate="CASCADE", ondelete="CASCADE"),
+                             ondelete="CASCADE",name='hm_fcs_fk'),
         {'schema': "flight_meta"}
     )
 
@@ -82,17 +96,21 @@ class FlightMetaInstruments(Base):
     heading = Column(Float)
     east_velocity = Column(Float)
     acceleration_z = Column(Float)
-    header_id = Column(BigInteger, ForeignKey("flight_meta.header_meta.stamp"))
+    header_id = Column(BigInteger, ForeignKey("flight_meta.header_meta.stamp",
+                             ondelete="CASCADE"))
     meta_header = relationship("FlightMetaHeader")
+
     flight = Column(String(20), nullable=False)
     cam = Column(String(20), nullable=False)
     survey = Column(String(20), nullable=False)
-
     __table_args__ = (
         ForeignKeyConstraint([flight, cam, survey], [FlightCamId.flight, FlightCamId.cam, FlightCamId.survey],
-                             onupdate="CASCADE", ondelete="CASCADE"),
+                             onupdate="CASCADE", ondelete="CASCADE", name='ins_fcs_fk'),
+        Index('ins_flidx', 'flight', 'cam', 'survey'),
         {'schema': "flight_meta"}
     )
+# Index('flight_meta.ins_meta.ins_flidx', FlightMetaInstruments.ins_fcs_fk)
+# Index(flight_meta.ins_meta.ins_flidx, '"flight_meta.ins_meta.ins_fcs_fk')
 
 
 
@@ -102,7 +120,8 @@ class FlightMetaEvent(Base):
     event_port = Column(Integer)
     event_num = Column(Integer)
     time = Column(Float)
-    header_id = Column(BigInteger, ForeignKey("flight_meta.header_meta.stamp"))
+    header_id = Column(BigInteger, ForeignKey("flight_meta.header_meta.stamp",
+                             ondelete="CASCADE"))
     meta_header = relationship("FlightMetaHeader")
     flight = Column(String(20), nullable=False)
     cam = Column(String(20), nullable=False)
@@ -110,11 +129,10 @@ class FlightMetaEvent(Base):
 
     __table_args__ = (
         ForeignKeyConstraint([flight, cam, survey], [FlightCamId.flight, FlightCamId.cam, FlightCamId.survey],
-                             onupdate="CASCADE", ondelete="CASCADE"),
+                             onupdate="CASCADE", ondelete="CASCADE", name="evt_fcs_fk"),
+        Index('evt_flidx', 'flight', 'cam', 'survey'),
         {'schema': "flight_meta"}
     )
-
-    meta_header = relationship("FlightMetaHeader")
 
 
 class NOAAImage(Base):
@@ -142,9 +160,11 @@ class NOAAImage(Base):
     flight = Column(String(20), nullable=False)
     cam = Column(String(20), nullable=False)
     survey = Column(String(20), nullable=False)
+
     __table_args__ = (
         ForeignKeyConstraint([flight, cam, survey], [FlightCamId.flight, FlightCamId.cam, FlightCamId.survey],
-                             onupdate="CASCADE", ondelete="CASCADE"),
+                             onupdate="CASCADE", ondelete="CASCADE", name="im_fcs_fk"),
+        Index('im_flidx', 'flight', 'cam', 'survey'),
         {'schema': "noaa_surveys"}
     )
 
@@ -157,6 +177,7 @@ class NOAAImage(Base):
                " survey='{}', timestamp='{}', cam_position='{}')>" \
             .format(self.file_name, self.type, self.foggy, self.quality, self.width, self.height, self.depth, self.flight, self.timestamp
                     , self.survey, self.timestamp, self.cam_position)
+
 
 class EOImage(NOAAImage):
     __mapper_args__ = {
@@ -512,4 +533,4 @@ class TrainTestSplit(Base):
             .format(self.id, self.label, self.type)
 
 
-TABLE_DEPENDENCY_ORDER = [FlightMetaHeader,FlightMetaEvent, FlightMetaInstruments, NOAAImage,Job,Worker,Species,Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, ImageDimension, Chip, LabelChipBase, LabelChips, FPChips, TrainTestSplit]
+TABLE_DEPENDENCY_ORDER = [FlightMetaHeader,FlightMetaEvent, FlightMetaInstruments, NOAAImage,FlightCamId, Job,Worker,Species,Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, ImageDimension, Chip, LabelChipBase, LabelChips, FPChips, TrainTestSplit]

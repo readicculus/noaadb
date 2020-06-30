@@ -19,7 +19,7 @@ def create_schema(engine, echo=False):
     engine.execute(DDL("CREATE SCHEMA IF NOT EXISTS chips"))
     engine.execute(DDL("CREATE SCHEMA IF NOT EXISTS ml"))
     engine.execute(DDL("CREATE SCHEMA IF NOT EXISTS flight_meta"))
-    Base.metadata.create_all(engine)
+    Base.metadata.create_all(engine, checkfirst=False)
     print("Success")
 
 def refresh_schema():
