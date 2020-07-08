@@ -10,6 +10,7 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import validates, relationship, column_property, backref, aliased, with_polymorphic
 from sqlalchemy.schema import CheckConstraint, Sequence
 from sqlalchemy.dialects.postgresql import ENUM
+import numpy as np
 from sqlalchemy.orm.session import Session
 class ImageType(enum.IntEnum):
     EO = 1
@@ -131,12 +132,31 @@ class FlightMetaEvent(SurveyDataBase):
                              ondelete="CASCADE"), nullable=False, unique=True)
     header_meta = relationship("HeaderMeta")#, backref=backref('evt', uselist=False, lazy='select'))
 
-class Homoraphy(SurveyDataBase):
+class Homography(SurveyDataBase):
     __tablename__ = 'homography'
+
     id = Column(Integer, autoincrement=True, primary_key=True)
-    matrix = Column(String)
-    camera_id = Column(Integer, ForeignKey(Camera.id))
+    h00 = Column(Float, nullable=False)
+    h01 = Column(Float, nullable=False)
+    h02 = Column(Float, nullable=False)
+    h10 = Column(Float, nullable=False)
+    h11 = Column(Float, nullable=False)
+    h12 = Column(Float, nullable=False)
+    h20 = Column(Float, nullable=False)
+    h21 = Column(Float, nullable=False)
+    h22 = Column(Float, nullable=False)
+    file_name = Column(FILENAME, nullable=False)
+    file_path = Column(FILEPATH)
+
+    camera_id = Column(Integer, ForeignKey(Camera.id, ondelete="CASCADE"), nullable=False)
     camera = relationship("Camera")
+
+    @hybrid_property
+    def matrix(self):
+        return np.array([[self.h00,self.h01,self.h02],
+                         [self.h10,self.h11,self.h12],
+                         [self.h20,self.h21,self.h22]])
+
 
 class EOImage(SurveyDataBase):
     __tablename__ = 'eo_image'

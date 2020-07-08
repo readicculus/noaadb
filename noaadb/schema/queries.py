@@ -114,3 +114,15 @@ def add_worker_if_not_exists(session, name, is_human):
         session.flush()
 
     return w
+
+def add_worker_if_not_exists(session, name, is_human):
+    w = get_worker(session, name)
+    if not w:
+        w = Worker(
+            name=name,
+            human=is_human
+        )
+        session.add(w)
+        session.flush()
+
+    return w
