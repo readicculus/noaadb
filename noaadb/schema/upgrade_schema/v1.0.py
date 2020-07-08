@@ -1,7 +1,12 @@
 from sqlalchemy import create_engine
 
 from noaadb import DATABASE_URI
-from noaadb.schema.schema_ops import create_schema, drop_schema
+from noaadb.schema.schema_ops import *
+
 source_engine = create_engine(DATABASE_URI)
-drop_schema(source_engine, echo=True)
-create_schema(source_engine, echo=True)
+drop_ml_schema(source_engine, tables_only=False)
+drop_label_schema(source_engine, tables_only=False)
+drop_survey_schema(source_engine, tables_only=False)
+create_survey_schema(source_engine, tables_only=False)
+create_label_schema(source_engine, tables_only=False)
+create_ml_schema(source_engine, tables_only=False)

@@ -1,5 +1,7 @@
-from noaadb.schema.models import NOAAImage, Species, Job, Worker, Sighting, \
-    Sighting, LabelEntry, IRLabelEntry, EOLabelEntry
+from sqlalchemy import and_
+
+from noaadb.schema.models import Species, Job, Worker, Sighting, \
+    Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, Survey, Flight, Camera
 
 
 # filter queries
@@ -8,7 +10,7 @@ def unidentified_labels(q):
     return q.filter_by(hotspot_id=None)
 # Constrained gets
 def get_existing_eo_label(session, label):
-    return session.query(EOLabelEntry).filter_by(image=label.image,
+    return session.query(EOLabelEntry).filter_by(image_id=label.image_id,
                                                        x1=label.x1,
                                                        x2=label.x2,
                                                        y1=label.y1,
@@ -30,8 +32,27 @@ def get_existing_sighting(session, sighting):
 
 
 # Get queries
-def get_image(session, name):
-    return  session.query(NOAAImage).filter_by(file_name=name).first()
+def add_or_get_cam_flight_survey(s, c, f, survey):
+    survey_obj = s.query(Survey).filter_by(name=survey).first()
+    if not survey_obj:
+        survey_obj = Survey(name=survey)
+        s.add(survey_obj)
+        s.flush()
+    fl_obj = s.query(Flight).filter_by(flight_name = f).filter_by(survey_id=survey_obj.id).first()
+    if not fl_obj:
+        fl_obj = Flight(flight_name=f, survey_id=survey_obj.id)
+        s.add(fl_obj)
+        s.flush()
+    cam_obj = s.query(Camera).filter_by(cam_name=c).filter_by(flight_id=fl_obj.id).first()
+    if not cam_obj:
+        cam_obj = Camera(cam_name=c, flight_id=fl_obj.id)
+        s.add(cam_obj)
+        s.flush()
+
+    return cam_obj
+
+# def get_image(session, name):
+#     return  session.query(NOAAImage).filter_by(file_name=name).first()
 
 def get_species(session, name):
     return  session.query(Species).filter_by(name=name).first()
@@ -47,8 +68,8 @@ def get_all_species(session):
     return  session.query(Species).all()
 
 # exists queries
-def image_exists(session, name):
-    return session.query(session.query(NOAAImage).filter_by(file_name=name).deleted()).scalar()
+# def image_exists(session, name):
+#     return session.query(session.query(NOAAImage).filter_by(file_name=name).deleted()).scalar()
 
 def species_exists(session, name):
     return session.query(session.query(Species).filter_by(name=name).deleted()).scalar()
@@ -70,8 +91,8 @@ def label_exists(session, label):
                                     y2=label.y2).deleted()).scalar()
 
 def add_job_if_not_exists(session, name, path):
-    j = get_job_by_name(session, name)
-    if not job_exists(session, name):
+    j = session.query(Job).filter_by(name=name).first()
+    if not j:
         j = Job(
             name=name,
             file_path=path,

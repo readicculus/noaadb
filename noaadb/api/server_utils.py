@@ -72,7 +72,7 @@ def false_positive_query(confidence, session=db.session, width=608, height=608):
     if confidence != 0:
         query = query.filter(TruePositiveLabels.confidence > confidence)
     query = query.join(NOAAImage, TruePositiveLabels.image)
-    query = query.filter(NOAAImage.type == ImageType.RGB)
+    query = query.filter(NOAAImage.type == ImageType.EO)
     query.order_by(TruePositiveLabels.image_id)
     return query
 

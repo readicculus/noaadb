@@ -28,7 +28,7 @@ Session = sessionmaker(bind=engine)
 session = Session()
 
 # Populate Chip Table
-images = session.query(NOAAImage).filter(NOAAImage.type == ImageType.RGB).all()
+images = session.query(NOAAImage).filter(NOAAImage.type == ImageType.EO).all()
 # def plot_tiles(d):
 #     img = np.zeros((im_h, im_w, 1), dtype="uint8")
 #     cv2.rectangle(img, (x1, y1), (x2, y2), (255, 255, 0), 2)
