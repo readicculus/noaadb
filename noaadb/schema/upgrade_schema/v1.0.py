@@ -1,7 +1,4 @@
-from sqlalchemy import create_engine
-
-from noaadb import DATABASE_URI
-from noaadb.schema.schema_ops import *
+from noaadb.utils.schema_ops import *
 
 source_engine = create_engine(DATABASE_URI)
 drop_ml_schema(source_engine, tables_only=False)

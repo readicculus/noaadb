@@ -197,7 +197,15 @@ class IRImage(SurveyDataBase):
     header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=False)
     header_meta = relationship("HeaderMeta")#, backref=backref('ir_image', uselist=False, lazy='select'))
 
-
+class HeaderGroup(SurveyDataBase):
+    __tablename__ = 'header_group'
+    id = Column(Integer, autoincrement=True, primary_key=True)
+    eo_image_id = Column(FILENAME, ForeignKey(EOImage.file_name))
+    eo_image = relationship(EOImage)
+    ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name))
+    ir_image = relationship(IRImage)
+    evt_header_id = Column(Integer, ForeignKey(FlightMetaEvent.id, ondelete="CASCADE"))
+    evt_header_meta = relationship("FlightMetaEvent")
 ####
 # Label schema models
 ####

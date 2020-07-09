@@ -5,7 +5,7 @@ setup(
    version='0.0.1',
    author='Yuval Boss',
    author_email='yuval@cs.washington.edu',
-   packages=['noaadb','noaadb.api', 'noaadb.schema'],
+   packages=['noaadb','noaadb.api', 'noaadb.schema', 'noaadb.utils'],
    scripts=[],
    url='git@github.com:readicculus/noaadb.git',
    license='LICENSE.txt',

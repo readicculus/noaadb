@@ -1,16 +1,14 @@
 import os
 
-from sqlalchemy import create_engine, MetaData, DDL
-from sqlalchemy import Column, Integer, String, Table
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine, DDL
 from sqlalchemy.orm import sessionmaker
 
 # Engine to the database to query the data from
 # (postgresql)
 from noaadb import DATABASE_URI
-from noaadb.schema.models import TABLE_DEPENDENCY_ORDER, Base, Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, \
+from noaadb.schema.models import TABLE_DEPENDENCY_ORDER, Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, \
     ImageDimension, Chip, LabelChipBase, LabelChips, FPChips, TrainTestSplit, NOAAImage, Job, Worker, Species
-from noaadb.schema.schema_ops import drop_schema, create_schema
+from noaadb.utils.schema_ops import drop_schema, create_schema
 from scripts.util import printProgressBar
 
 source_engine = create_engine(DATABASE_URI)
