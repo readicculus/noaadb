@@ -6,14 +6,14 @@ View the JSON API specification at https://www.yuvalboss.com/api/
 
 #### structure
     .
-    ├── api                    # public api stuff
-    │   └── server.py          # server
-    ├── schema                 # generate datasets/chips for training
-    │   ├── models.py          # schema definition
-    │   ├── queries.py         # utility queries
-    │   ├── config.py          # database connection configurations for creation/populations (requires env variables)
-    │   └── restore_db.py      # recreates all tables in the schema
-    ├── setup.py               # project path/dependency setup stuff
+    ├── api                      # public api stuff
+    │   └── server.py            # server
+    ├── schema                   # generate datasets/chips for training
+    │   └── models/              # generate datasets/chips for training
+    │       ├──  survey_data.py  # schema definition for survey data
+    │       ├──  label_data.py   # schema definition for label data
+    │       └──  ml_data.py      # schema definition for ml experiment data
+    ├── setup.py                 # project path/dependency setup stuff
     └── README.md
 
 The public api includes hardcoded readonly credentials.
