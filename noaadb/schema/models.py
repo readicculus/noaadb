@@ -173,7 +173,7 @@ class EOImage(SurveyDataBase):
     is_bigendian = Column(BOOLEAN)
     step = Column(Integer)
     encoding = Column(VARCHAR(20))
-    header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=False)
+    header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=True)
     header_meta = relationship("HeaderMeta")#, backref=backref('eo_image', uselist=False, lazy='select'))
 
 
@@ -194,7 +194,7 @@ class IRImage(SurveyDataBase):
     is_bigendian = Column(BOOLEAN)
     step = Column(Integer)
     encoding = Column(VARCHAR(20))
-    header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=False)
+    header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=True)
     header_meta = relationship("HeaderMeta")#, backref=backref('ir_image', uselist=False, lazy='select'))
 
 class HeaderGroup(SurveyDataBase):
