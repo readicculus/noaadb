@@ -1,7 +1,9 @@
 from sqlalchemy import create_engine, DDL
 
 from noaadb import DATABASE_URI
-from noaadb.schema.models import MLBase, LabelBase, SurveyDataBase
+from noaadb.schema.models.label_data import LabelBase
+from noaadb.schema.models.survey_data import SurveyDataBase
+
 
 def drop_survey_schema(engine,tables_only=True):
     if not tables_only:
@@ -16,10 +18,11 @@ def drop_label_schema(engine,tables_only=True):
     print("Dropped label schema")
 
 def drop_ml_schema(engine,tables_only=True):
-    if not tables_only:
-        engine.execute(DDL("DROP SCHEMA IF EXISTS ml CASCADE"))
-    MLBase.metadata.drop_all(engine)
-    print("Dropped ml schema")
+    pass
+    # if not tables_only:
+    #     engine.execute(DDL("DROP SCHEMA IF EXISTS ml CASCADE"))
+    # MLBase.metadata.drop_all(engine)
+    # print("Dropped ml schema")
 
 def create_survey_schema(engine,tables_only=True):
     if not tables_only:
@@ -33,7 +36,8 @@ def create_label_schema(engine,tables_only=True):
     LabelBase.metadata.create_all(engine, checkfirst=False)
 
 def create_ml_schema(engine,tables_only=True):
-    if not tables_only:
-        engine.execute(DDL("CREATE SCHEMA IF NOT EXISTS ml"))
-    MLBase.metadata.create_all(engine, checkfirst=False)
+    pass
+    # if not tables_only:
+    #     engine.execute(DDL("CREATE SCHEMA IF NOT EXISTS ml"))
+    # MLBase.metadata.create_all(engine, checkfirst=False)
 
