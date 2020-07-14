@@ -8,7 +8,7 @@ from sqlalchemy.orm import aliased
 
 from noaadb.api.config import db
 from noaadb.api.models import label_schema, images_schema, labels_schema, jobs_schema, workers_schema, species_schema
-from noaadb.schema.models import NOAAImage, Job, Worker, Species, TruePositiveLabels, Sighting, TrainTestSplit, MLType, ImageType, \
+from noaadb.schema.models import NOAAImage, Job, Worker, Species, TruePositiveLabels, EOIRLabelPair, TrainTestSplit, MLType, ImageType, \
     FPChips, Chip
 
 default_label_filter_options = \
@@ -84,9 +84,9 @@ def labels_query(opts):
 
     query = db.session.query(TruePositiveLabels)
     if opts["image_type"] == "ir":  # IR Image
-        query = query.join(Sighting, Sighting.ir_label_id == TruePositiveLabels.id)
+        query = query.join(EOIRLabelPair, EOIRLabelPair.ir_label_id == TruePositiveLabels.id)
     else:  # EO Image
-        query = query.join(Sighting, Sighting.eo_label_id == TruePositiveLabels.id)
+        query = query.join(EOIRLabelPair, EOIRLabelPair.eo_label_id == TruePositiveLabels.id)
 
     if not opts["ml_data_type"] == "all":
         type = MLType.TRAIN if opts["ml_data_type"] == "train" else MLType.TEST

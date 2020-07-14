@@ -1,7 +1,7 @@
 from sqlalchemy import and_
 
-from noaadb.schema.models import Species, Job, Worker, Sighting, \
-    Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, Survey, Flight, Camera
+from noaadb.schema.models import Species, Job, Worker, EOIRLabelPair, \
+    EOIRLabelPair, LabelEntry, IRLabelEntry, EOLabelEntry, Survey, Flight, Camera
 
 
 # filter queries
@@ -24,8 +24,8 @@ def get_existing_ir_label(session, label):
                                                        y2=label.y2).first()
 
 def get_existing_sighting(session, sighting):
-    return session.query(Sighting).filter_by(eo_label=sighting.eo_label,
-                                             ir_label=sighting.ir_label).first()
+    return session.query(EOIRLabelPair).filter_by(eo_label=sighting.eo_label,
+                                                  ir_label=sighting.ir_label).first()
 # def get_existing_falsepositive(session, hs):
 #     return session.query(FalsePositiveLabels).filter_by(eo_label=hs.eo_label,
 #                                                         ir_label=hs.ir_label).first()

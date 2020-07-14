@@ -1,26 +1,20 @@
 import enum
-from operator import and_
 
-from sqlalchemy.ext.declarative import declarative_base, declared_attr, ConcreteBase, AbstractConcreteBase, \
-    DeferredReflection
-from sqlalchemy import Column, Date, VARCHAR, DateTime, BOOLEAN, ForeignKey, \
-    MetaData, Integer, UniqueConstraint, Float, JSON, func, event, select, Unicode, String, BigInteger, \
-    ForeignKeyConstraint, Index, ARRAY
-from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import validates, relationship, column_property, backref, aliased, with_polymorphic
-from sqlalchemy.schema import CheckConstraint, Sequence
+from sqlalchemy import Column, Date, VARCHAR, BOOLEAN, ForeignKey, \
+    MetaData, Integer, Float
 from sqlalchemy.dialects.postgresql import ENUM
-import numpy as np
-from sqlalchemy.orm.session import Session
+from sqlalchemy.ext.declarative import declarative_base, declared_attr, ConcreteBase
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import validates, relationship
+from sqlalchemy.schema import CheckConstraint, Sequence
 
 from noaadb.schema import JOBWORKERNAME, FILEPATH, FILENAME
 from noaadb.schema.models import IRImage, EOImage
-from noaadb.schema.models.survey_data import ImageType
+from noaadb.schema.models.survey_data import ImageType, FusedImage
 
-label_meta = MetaData(schema='label_data')
+schema_name = 'label_data'
+label_meta = MetaData(schema=schema_name)
 LabelBase = declarative_base(metadata=label_meta)
-
-
 
 ####
 # Label schema models
@@ -62,23 +56,9 @@ class Species(LabelBase):
             .format(self.id, self.name)
 
 class LabelEntry(ConcreteBase, LabelBase):
-    # __abstract__ = True
     __tablename__ = 'labels'
-    # id = Column(Integer,
-    #             Sequence('label_seq', start=1, increment=1, metadata=meta, schema="noaa_surveys"),
-    #             primary_key=True)
-    id = Column(Integer, autoincrement=True, primary_key=True)
-    # @declared_attr
-    # def id(cls):
-    #     return Column(Integer, primary_key=True,autoincrement=True)
 
-    # @declared_attr
-    # def image_id(cls):
-    #     return Column(FILENAME, ForeignKey(NOAAImage.file_name), nullable=False)
-    #
-    # @declared_attr
-    # def image(cls):
-    #     return relationship(NOAAImage)
+    id = Column(Integer, autoincrement=True, primary_key=True)
 
     @declared_attr
     def job_id(cls):
@@ -107,6 +87,8 @@ class LabelEntry(ConcreteBase, LabelBase):
     x2 = Column(Integer)
     y1 = Column(Integer)
     y2 = Column(Integer)
+    hotspot_id = Column(VARCHAR(50))
+    age_class = Column(VARCHAR(50))
 
     confidence = Column(Float)
     is_shadow = Column(BOOLEAN, nullable=True)
@@ -118,12 +100,25 @@ class LabelEntry(ConcreteBase, LabelBase):
                         name='bbox_valid'),
         )
 
-
-    discriminator = Column('label_type', ENUM(ImageType, name="im_type_enum", metadata=label_meta, create_type=False))
-    __mapper_args__ = {'polymorphic_on': discriminator
+    image_type = Column('label_type', ENUM(ImageType, name="im_type_enum", metadata=label_meta, create_type=False))
+    __mapper_args__ = {'polymorphic_on': image_type
                        }
 
-
+    def to_dict(cls):
+        res = {
+            'image_id': cls.image_id,
+            'x1': cls.x1,
+            'x2': cls.x2,
+            'y1': cls.y1,
+            'y2': cls.y2,
+            'conf': cls.confidence,
+            'species': cls.species.name,
+            'age_class': cls.age_class,
+            'hotspot_id': cls.hotspot_id,
+            'job': cls.job.name,
+            'worker': cls.worker.name
+        }
+        return res
     @validates('x1', 'x2', 'y1', 'y2')
     def validate_bbox(self, key, f) -> str:
         if key == 'y2' and self.y2 is not None and self.y1 > f:
@@ -138,6 +133,7 @@ class IRLabelEntry(LabelEntry):
     id = Column(Integer, ForeignKey(LabelEntry.id, ondelete="CASCADE"), unique=True)
     image_id = Column(FILENAME, ForeignKey(IRImage.file_name), nullable=False)
     image = relationship(IRImage)
+
     __tablename__ = 'ir_label'
     __mapper_args__ = {
     'polymorphic_identity':ImageType.IR,
@@ -159,33 +155,41 @@ class EOLabelEntry(LabelEntry):
         'inherit_condition': id == LabelEntry.id,
         'with_polymorphic': '*'
     }
-    # __table_args__ = (
-    #     UniqueConstraint('confidence', 'x1', 'x2', 'y1', 'y2', 'image_id', 'species_id',
-    #                      name='eo_label_unique_constraint'),
-    # )
-class Sighting(LabelBase):
-    __tablename__ = 'sightings'
+
+
+class EOIRLabelPair(LabelBase):
+    __tablename__ = 'eoir_label_pair'
     id = Column(Integer,
                 Sequence('sightings_seq', start=1, increment=1, metadata=label_meta),
                 primary_key=True)
 
-    hotspot_id = Column(VARCHAR(50))
-
-    age_class = Column(VARCHAR(50))
     ir_label_id = Column(Integer, ForeignKey(IRLabelEntry.id,ondelete="CASCADE"))
     eo_label_id = Column(Integer, ForeignKey(EOLabelEntry.id,ondelete="CASCADE"))
 
-    ir_label = relationship("IRLabelEntry", foreign_keys=[ir_label_id])#, backref=backref('sightings', cascade='all,delete'))
-    eo_label = relationship("EOLabelEntry", foreign_keys=[eo_label_id])#, backref=backref('sightings', cascade='all,delete'))
+    ir_label = relationship("IRLabelEntry")
+    eo_label = relationship("EOLabelEntry")
 
-    discriminator = Column('label_type', ENUM(LabelType, name="label_type_enum", metadata=label_meta, create_type=True))
-    __mapper_args__ = {'polymorphic_on': discriminator}
-
-class FalsePositiveSightings(Sighting):
-    __mapper_args__ = {
-        'polymorphic_identity':LabelType.FP,
-    }
-class TruePositiveSighting(Sighting):
-    __mapper_args__ = {
-        'polymorphic_identity':LabelType.TP,
-    }
+    def to_dict(cls):
+        ir =  cls.ir_label.to_dict() if cls.ir_label else {}
+        eo = cls.eo_label.to_dict() if cls.eo_label else {}
+        shared_label = ir if cls.ir_label else eo
+        res = {
+            'eo_image': eo.get('image_id'),
+            'ir_image': ir.get('image_id'),
+            'species': shared_label.get('species'),
+            'age_class': shared_label.get('age_class'),
+            'hotspot_id': shared_label.get('hotspot_id'),
+            'job': shared_label.get('job'),
+            'worker': shared_label.get('worker'),
+            'ir_label': None if cls.ir_label is None else {'x1': ir.get('x1'), 'x2': ir.get('x2'), 'y1': ir.get('y1'), 'y2': ir.get('y2'), 'conf': ir.get('conf')},
+            'eo_label': None if cls.eo_label is None else {'x1': eo.get('x1'), 'x2': eo.get('x2'), 'y1': eo.get('y1'), 'y2': eo.get('y2'), 'conf': eo.get('conf')}
+        }
+        return res
+# class FalsePositiveSightings(EOIRLabelPair):
+#     __mapper_args__ = {
+#         'polymorphic_identity':LabelType.FP,
+#     }
+# class TruePositiveEOIRLabelPair(EOIRLabelPair):
+#     __mapper_args__ = {
+#         'polymorphic_identity':LabelType.TP,
+#     }

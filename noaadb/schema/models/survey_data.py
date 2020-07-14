@@ -1,17 +1,16 @@
 import enum
-from operator import and_
 
-from sqlalchemy.ext.declarative import declarative_base
+import numpy as np
 from sqlalchemy import Column, VARCHAR, DateTime, BOOLEAN, ForeignKey, \
     MetaData, Integer, UniqueConstraint, Float, String, BigInteger
+from sqlalchemy.dialects.postgresql import ENUM
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import ENUM
-import numpy as np
 
 from noaadb.schema import FILENAME, FILEPATH
-
-sd_meta = MetaData(schema='survey_data')
+schema_name = 'survey_data'
+sd_meta = MetaData(schema=schema_name)
 SurveyDataBase = declarative_base(metadata=sd_meta)
 
 
@@ -97,8 +96,6 @@ class InstrumentMeta(SurveyDataBase):
                              ondelete="CASCADE"), unique=True, nullable=False)
     header_meta = relationship("HeaderMeta")#, backref=backref('ins', uselist=False, lazy='select'))
 
-
-
 class EventMeta(SurveyDataBase):
     __tablename__ = 'evt_meta'
     id = Column(Integer, autoincrement=True, primary_key=True)
@@ -172,12 +169,29 @@ class IRImage(SurveyDataBase):
     header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=True)
     header_meta = relationship("HeaderMeta")#, backref=backref('ir_image', uselist=False, lazy='select'))
 
-class HeaderGroup(SurveyDataBase):
-    __tablename__ = 'header_group'
-    id = Column(Integer, autoincrement=True, primary_key=True)
+class FusedImage(SurveyDataBase):
+    __tablename__ = 'fused_image'
+    file_name = Column(FILENAME, primary_key=True)
+    s3_uri = Column(FILEPATH, nullable=False)
+    file_path = Column(FILEPATH, nullable=False)
+
+    width = Column(Integer, nullable=False)
+    height = Column(Integer, nullable=False)
+    depth = Column(Integer, nullable=False)
+
     eo_image_id = Column(FILENAME, ForeignKey(EOImage.file_name))
     eo_image = relationship(EOImage)
     ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name))
+    ir_image = relationship(IRImage)
+    homography_id = Column(Integer, ForeignKey(Homography.id))
+    homography = relationship(Homography)
+
+class HeaderGroup(SurveyDataBase):
+    __tablename__ = 'header_group'
+    id = Column(Integer, autoincrement=True, primary_key=True)
+    eo_image_id = Column(FILENAME, ForeignKey(EOImage.file_name, ondelete="CASCADE"))
+    eo_image = relationship(EOImage)
+    ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name, ondelete="CASCADE"))
     ir_image = relationship(IRImage)
     evt_header_id = Column(Integer, ForeignKey(EventMeta.id, ondelete="CASCADE"))
     evt_header_meta = relationship("EventMeta")

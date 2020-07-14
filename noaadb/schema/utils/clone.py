@@ -6,10 +6,10 @@ from sqlalchemy.orm import sessionmaker
 # Engine to the database to query the data from
 # (postgresql)
 from noaadb import DATABASE_URI
-from noaadb.schema.models import TABLE_DEPENDENCY_ORDER, Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, \
+from noaadb.schema.models import TABLE_DEPENDENCY_ORDER, EOIRLabelPair, LabelEntry, IRLabelEntry, EOLabelEntry, \
     ImageDimension, Chip, LabelChipBase, LabelChips, FPChips, TrainTestSplit, NOAAImage, Job, Worker, Species
 from noaadb.utils.schema_ops import drop_schema, create_schema
-from scripts.util import printProgressBar
+from import_project.utils.util import printProgressBar
 
 source_engine = create_engine(DATABASE_URI)
 SourceSession = sessionmaker(bind=source_engine)
@@ -57,7 +57,7 @@ def copy_table(src_session, src_class, dst_session, dst_class):
     for a in missing_cols:
         print("%s not in dest %s" % (a,dst_class().__table__.name))
 
-for table in  [NOAAImage,Job,Worker,Species,Sighting, LabelEntry, IRLabelEntry, EOLabelEntry, ImageDimension, Chip, LabelChipBase, LabelChips, FPChips, TrainTestSplit]:
+for table in  [NOAAImage, Job, Worker, Species, EOIRLabelPair, LabelEntry, IRLabelEntry, EOLabelEntry, ImageDimension, Chip, LabelChipBase, LabelChips, FPChips, TrainTestSplit]:
     # disable_constrain = "ALTER TABLE {0} DISABLE TRIGGER ALL;".format(table.__table__.fullname)
     # enable_constrain = "ALTER TABLE {0} ENABLE TRIGGER ALL;".format(table.__table__.fullname)
     # dest_engine.execute("SET search_path TO %s" % os.environ["R_DB_NAME"])

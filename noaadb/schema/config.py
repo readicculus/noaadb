@@ -1,7 +1,7 @@
 import os
 config = None
 is_remote =  int("REMOTE" in os.environ and os.environ["REMOTE"])
-is_debug = int("DEBUG" in os.environ and os.environ["DEBUG"])
+is_debug = int(not "DEBUG" in os.environ or os.environ["DEBUG"])
 if is_debug or (not is_debug and is_remote):
     config = {
         "db_password": os.environ["DB_PWD"] if "DB_PWD" in os.environ else None,

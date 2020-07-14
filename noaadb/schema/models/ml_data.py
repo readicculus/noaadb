@@ -1,20 +1,18 @@
 import enum
-from operator import and_
 
-from sqlalchemy.ext.declarative import declarative_base, declared_attr, ConcreteBase, AbstractConcreteBase, \
-    DeferredReflection
-from sqlalchemy import Column, Date, VARCHAR, DateTime, BOOLEAN, ForeignKey, \
-    MetaData, Integer, UniqueConstraint, Float, JSON, func, event, select, Unicode, String, BigInteger, \
-    ForeignKeyConstraint, Index, ARRAY
-from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import validates, relationship, column_property, backref, aliased, with_polymorphic
-from sqlalchemy.schema import CheckConstraint, Sequence
+from sqlalchemy import Column, ForeignKey, \
+    MetaData, Integer, UniqueConstraint, Float
 from sqlalchemy.dialects.postgresql import ENUM
-import numpy as np
-from sqlalchemy.orm.session import Session
+from sqlalchemy.ext.declarative import declarative_base, declared_attr
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import validates, relationship
+from sqlalchemy.schema import Sequence
 
 
 # V1.1 Models
+from noaadb.schema.models import EOLabelEntry
+
+
 class MLType(enum.IntEnum):
     TRAIN = 1
     TEST = 2
@@ -22,6 +20,7 @@ class MLType(enum.IntEnum):
 ml_schema_name = 'ml_data'
 ml_meta = MetaData(schema='ml_data')
 MLBase = declarative_base(metadata=ml_meta)
+
 class ImageDimension(MLBase):
     __tablename__ = 'image_dimensions'
     id = Column(Integer,
@@ -87,7 +86,7 @@ class LabelChipBase(MLBase):
 
     @declared_attr
     def label_id(cls):
-        return Column(Integer, ForeignKey("labels.eo_label.id"), nullable=False)
+        return Column(Integer, ForeignKey(EOLabelEntry.id), nullable=False)
 
     @declared_attr
     def label(cls):

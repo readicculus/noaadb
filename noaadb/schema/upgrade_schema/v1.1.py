@@ -1,11 +1,10 @@
 from sqlalchemy import create_engine, and_
 from sqlalchemy.orm import sessionmaker, aliased
-from sqlalchemy import DDL, func
+from sqlalchemy import DDL
 from noaadb import DATABASE_URI
-from noaadb.schema.models import NOAAImage, ImageType, Sighting, LabelChips, Chip, ImageDimension, Species, \
-    FPChips, LabelEntry, EOLabelEntry, FalsePositiveSightings, TruePositiveSighting
+from noaadb.schema.models import NOAAImage, ImageType, LabelChips, Chip, ImageDimension, FPChips, EOLabelEntry, FalsePositiveSightings
 
-from scripts.util import printProgressBar
+from import_project.utils.util import printProgressBar
 
 
 

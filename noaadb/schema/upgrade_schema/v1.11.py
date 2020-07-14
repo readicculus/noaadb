@@ -1,13 +1,8 @@
 from sqlalchemy import create_engine, and_
 from sqlalchemy.orm import sessionmaker, aliased
-from sqlalchemy import DDL, func
+from sqlalchemy import func
 from noaadb import DATABASE_URI
-from noaadb.schema.models import NOAAImage, ImageType, Sighting, LabelChips, Chip, ImageDimension, Species, \
-    FPChips, LabelEntry, EOLabelEntry, FalsePositiveSightings, TruePositiveSighting
-
-from scripts.util import printProgressBar
-
-
+from noaadb.schema.models import LabelChips, Chip, EOLabelEntry
 
 engine = create_engine(DATABASE_URI, echo=False)
 
