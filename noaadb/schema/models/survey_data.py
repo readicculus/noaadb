@@ -150,6 +150,13 @@ class EOImage(SurveyDataBase):
     encoding = Column(VARCHAR(20))
     header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=True)
     header_meta = relationship("HeaderMeta")#, backref=backref('eo_image', uselist=False, lazy='select'))
+    def to_dict(self):
+        res = {'w': self.width,
+               'h': self.height,
+               'c': self.depth,
+               'file_name': self.file_name,
+               'file_path': self.file_path}
+        return res
 
 class IRImage(SurveyDataBase):
     __tablename__ = 'ir_image'
@@ -168,6 +175,13 @@ class IRImage(SurveyDataBase):
     encoding = Column(VARCHAR(20))
     header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=True)
     header_meta = relationship("HeaderMeta")#, backref=backref('ir_image', uselist=False, lazy='select'))
+    def to_dict(self):
+        res = {'w': self.width,
+               'h': self.height,
+               'c': self.depth,
+               'file_name': self.file_name,
+               'file_path': self.file_path}
+        return res
 
 class FusedImage(SurveyDataBase):
     __tablename__ = 'fused_image'
@@ -185,6 +199,14 @@ class FusedImage(SurveyDataBase):
     ir_image = relationship(IRImage)
     homography_id = Column(Integer, ForeignKey(Homography.id))
     homography = relationship(Homography)
+
+    def to_dict(self):
+        res = {'w': self.width,
+               'h': self.height,
+               'c': self.depth,
+               'file_name': self.file_name,
+               'file_path': self.file_path}
+        return res
 
 class HeaderGroup(SurveyDataBase):
     __tablename__ = 'header_group'

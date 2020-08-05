@@ -7,6 +7,5 @@ if is_debug or (not is_debug and is_remote):
         "db_password": os.environ["DB_PWD"] if "DB_PWD" in os.environ else None,
         "db_user": os.environ["DB_USR"] if "DB_USR" in os.environ else None,
         "db_name": os.environ["DB_NAME"],
-        "db_host": os.environ["DB_HOST"] if "DB_HOST" in os.environ else None,
-        "schema_name": "noaa_surveys"
+        "db_host": os.environ["DB_HOST"] if "DB_HOST" in os.environ else None
     }
