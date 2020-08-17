@@ -150,6 +150,12 @@ class EOImage(SurveyDataBase):
     encoding = Column(VARCHAR(20))
     header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=True)
     header_meta = relationship("HeaderMeta")#, backref=backref('eo_image', uselist=False, lazy='select'))
+
+    @hybrid_property
+    def guid(self):
+        # TODO only works for kotz
+        return self.file_name.replace('_rgb.jpg', '')
+
     def to_dict(self):
         res = {'w': self.width,
                'h': self.height,
@@ -175,6 +181,12 @@ class IRImage(SurveyDataBase):
     encoding = Column(VARCHAR(20))
     header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=True)
     header_meta = relationship("HeaderMeta")#, backref=backref('ir_image', uselist=False, lazy='select'))
+
+    @hybrid_property
+    def guid(self):
+        # TODO only works for kotz
+        return self.file_name.replace('_ir.tif', '')
+
     def to_dict(self):
         res = {'w': self.width,
                'h': self.height,
