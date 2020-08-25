@@ -4,6 +4,7 @@ import numpy as np
 from sqlalchemy import Column, VARCHAR, DateTime, BOOLEAN, ForeignKey, \
     MetaData, Integer, UniqueConstraint, Float, String, BigInteger
 from sqlalchemy.dialects.postgresql import ENUM
+from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
@@ -46,6 +47,7 @@ class Camera(SurveyDataBase):
     __tablename__ = 'camera'
     id = Column(Integer, autoincrement=True, primary_key=True)
     cam_name = Column(String(20))
+
     flight_id = Column(Integer, ForeignKey(Flight.id))
     flight = relationship(Flight)
     __table_args__ = (

@@ -33,6 +33,5 @@ check_env_variables()
 config = get_config()
 DATABASE_URI = 'postgres+psycopg2://%s:%s@%s:5432/%s' % \
                (config["db_user"], config["db_password"], config["db_host"], config["db_name"])
-print(DATABASE_URI)
 engine = create_engine(DATABASE_URI)
 Session = sessionmaker(engine)

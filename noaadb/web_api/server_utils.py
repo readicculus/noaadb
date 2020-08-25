@@ -6,8 +6,8 @@ from flask import request
 from sqlalchemy import not_, or_, and_
 from sqlalchemy.orm import aliased
 
-from noaadb.api.config import db
-from noaadb.api.models import label_schema, images_schema, labels_schema, jobs_schema, workers_schema, species_schema
+from noaadb.web_api.config import db
+from noaadb.web_api.models import label_schema, images_schema, labels_schema, jobs_schema, workers_schema, species_schema
 from noaadb.schema.models import NOAAImage, Job, Worker, Species, TruePositiveLabels, EOIRLabelPair, TrainTestSplit, MLType, ImageType, \
     FPChips, Chip
 

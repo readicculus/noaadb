@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, and_
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import DDL
 from noaadb import DATABASE_URI
-from noaadb.api.server_utils import labels_query
+from noaadb.web_api.server_utils import labels_query
 from noaadb.schema.models import TrainTestSplit, MLType
 
 engine = create_engine(DATABASE_URI, echo=False)
