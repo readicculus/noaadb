@@ -1,4 +1,5 @@
 import enum
+from typing import TypeVar
 
 import numpy as np
 from sqlalchemy import Column, VARCHAR, DateTime, BOOLEAN, ForeignKey, \
@@ -154,6 +155,13 @@ class EOImage(SurveyDataBase):
     header_meta = relationship("HeaderMeta")#, backref=backref('eo_image', uselist=False, lazy='select'))
 
     @hybrid_property
+    def camera(self): return self.header_meta.camera.cam_name
+    @hybrid_property
+    def flight(self): return self.header_meta.camera.flight.flight_name
+    @hybrid_property
+    def survey(self): return self.header_meta.camera.flight.survey.name
+
+    @hybrid_property
     def guid(self):
         # TODO only works for kotz
         return self.file_name.replace('_rgb.jpg', '')
@@ -183,6 +191,13 @@ class IRImage(SurveyDataBase):
     encoding = Column(VARCHAR(20))
     header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=True)
     header_meta = relationship("HeaderMeta")#, backref=backref('ir_image', uselist=False, lazy='select'))
+
+    @hybrid_property
+    def camera(self): return self.header_meta.camera.cam_name
+    @hybrid_property
+    def flight(self): return self.header_meta.camera.flight.flight_name
+    @hybrid_property
+    def survey(self): return self.header_meta.camera.flight.survey.name
 
     @hybrid_property
     def guid(self):
@@ -231,3 +246,6 @@ class HeaderGroup(SurveyDataBase):
     ir_image = relationship(IRImage)
     evt_header_id = Column(Integer, ForeignKey(EventMeta.id, ondelete="CASCADE"))
     evt_header_meta = relationship("EventMeta")
+
+
+DBImage = TypeVar('DBImage', EOImage, IRImage)

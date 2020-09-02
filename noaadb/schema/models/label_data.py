@@ -1,4 +1,5 @@
 import enum
+from typing import TypeVar
 
 from sqlalchemy import Column, Date, VARCHAR, BOOLEAN, ForeignKey, \
     MetaData, Integer, Float
@@ -193,3 +194,4 @@ class EOIRLabelPair(LabelBase):
 #     __mapper_args__ = {
 #         'polymorphic_identity':LabelType.TP,
 #     }
+DBLabel = TypeVar('DBLabel', EOLabelEntry, IRLabelEntry)
