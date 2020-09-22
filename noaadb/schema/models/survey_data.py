@@ -170,8 +170,8 @@ class EOImage(SurveyDataBase):
         res = {'w': self.width,
                'h': self.height,
                'c': self.depth,
-               'file_name': self.file_name,
-               'file_path': self.file_path}
+               'filename': self.file_name,
+               'filepath': self.file_path}
         return res
 
 class IRImage(SurveyDataBase):
@@ -208,8 +208,8 @@ class IRImage(SurveyDataBase):
         res = {'w': self.width,
                'h': self.height,
                'c': self.depth,
-               'file_name': self.file_name,
-               'file_path': self.file_path}
+               'filename': self.file_name,
+               'filepath': self.file_path}
         return res
 
 class FusedImage(SurveyDataBase):

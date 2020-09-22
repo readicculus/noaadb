@@ -1,4 +1,5 @@
-from noaadb.schema.models import IRImage, HeaderMeta, Flight, Camera, Survey, IRLabelEntry, EOImage
+from noaadb import Session
+from noaadb.schema.models import IRImage, HeaderMeta, Flight, Camera, Survey, IRLabelEntry, EOImage, Homography
 
 
 def get_ir_images(s, survey=None, flight=None, cam=None):
@@ -46,3 +47,7 @@ def get_ir_without_sightings(s, survey=None, flight=None, cam=None):
     if survey: q = q.filter(Survey.name == survey)
     return q.all()
 
+def get_homography(s: Session, flight, cam, survey) -> Homography:
+    q = s.query(Camera).filter(Camera.cam_name == cam).join(Flight).filter(Flight.flight_name == flight).join(Survey).filter(Survey.name == survey)
+    H = q.first()
+    return H
