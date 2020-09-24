@@ -1,17 +1,14 @@
 import enum
 
-from noaadb.schema import FILENAME
 from sqlalchemy import Column, ForeignKey, \
-    MetaData, Integer, UniqueConstraint, Float
+    MetaData, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ENUM
-from sqlalchemy.ext.declarative import declarative_base, declared_attr
-from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import validates, relationship
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 from sqlalchemy.schema import Sequence
 
-
-# V1.1 Models
-from noaadb.schema.models import EOLabelEntry, EOIRLabelPair, EOImage
+from noaadb.schema import FILENAME
+from noaadb.schema.models import EOImage, IRImage
 
 
 class MLType(enum.IntEnum):
@@ -21,6 +18,23 @@ class MLType(enum.IntEnum):
 ml_schema_name = 'ml_data'
 ml_meta = MetaData(schema='ml_data')
 MLBase = declarative_base(metadata=ml_meta)
+
+class NUC(MLBase):
+    __tablename__ = 'nucs'
+    id = Column(Integer,
+                Sequence('nuc_seq', start=1, increment=1, metadata=ml_meta),
+                primary_key=True)
+
+    ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name, ondelete="CASCADE"))
+    ir_image = relationship(IRImage)
+    __table_args__ = (UniqueConstraint('ir_image_id'),
+                      {'schema': "ml_data"})
+
+    def __repr__(self):
+        return "<NUC(id='{}', ir_image_id='{}')>" \
+            .format(self.id, self.ir_image_id)
+
+
 
 # class ImageDimension(MLBase):
 #     __tablename__ = 'image_dimensions'

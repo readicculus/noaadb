@@ -16,32 +16,6 @@ View the JSON API specification at https://www.yuvalboss.com/api/
     ├── setup.py                 # project path/dependency setup stuff
     └── README.md
 
-The public api includes hardcoded readonly credentials.
-#### Use Python to query hotspots api endpoint
-```
-import json
-import requests
-
-query_config = {
-          "species_list": [
-            "Polar Bear", "Bearded Seal"
-          ],
-          "workers": [],
-          "jobs": [],
-          "surveys": [],
-          "flights": [],
-          "camera_positions": [],
-          "image_type": "eo",
-          "show_shadows": False,
-          "show_removed_labels": False
-        }
-API_ENDPOINT = "https://yuvalboss.com/api/hotspots"
-headers = {'Content-type': 'application/json'}
-r = requests.post(url = API_ENDPOINT, data = json.dumps(query_config), headers=headers)
-if r.status_code != 200:
-    raise Exception(r.text)
-json_response = json.loads(r.text)
-```
 
 #### Download data models
 Can install models to be used with api and all associate code as follows:
@@ -60,3 +34,29 @@ git clone git@github.com:readicculus/noaadb.git
 cd noaadb/
 pip install . 
 ```
+
+#### How to use in a project
+```
+from noaadb import Session
+s = Session()
+s.query(...)
+s.close()
+```
+
+The above will initially raise an error.
+In order for the Session to connect to the database you need to set the correct environment variables.
+This package uses the dotenv package so one option is to include a `.env` file in the project you are importing noaadb from.
+```
+# .env file contents
+DB_USR=database username
+DB_PWD=database password
+DB_HOST=database url or localhost
+DB_NAME=name of database
+```
+Alternatively these could be defined as system environment variables if preferred.
+
+
+### Data models
+`survey_data.py`: models for survey data containing image metadata and associated instrument info
+`label_data.py`: label information, bounding boxes, species, and metadata about origins of the label data
+`ml_data.py`: ml related information, image tags, train/test info

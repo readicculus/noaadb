@@ -1,21 +1,20 @@
-
 from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(find_dotenv())
 import os
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+
 def check_env_variables():
-    required_env_variables = ['DB_NAME','DB_PWD', 'DB_USR', 'DB_HOST']
+    required_env_variables = ['DB_NAME', 'DB_PWD', 'DB_USR', 'DB_HOST']
     missing_end_variables = []
     for v in required_env_variables:
         if not v in os.environ:
             missing_end_variables.append(v)
-
-    if len(missing_end_variables):
+    if len(missing_end_variables) > 0:
         raise Exception('Missing environment variables %s' % ', '.join(missing_end_variables))
+
 
 def get_config():
     config = None
@@ -31,7 +30,9 @@ def get_config():
     return config
 
 
-
+dotenvfile = find_dotenv()
+print(dotenvfile)
+load_dotenv(dotenvfile, override=True)
 
 check_env_variables()
 
