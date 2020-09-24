@@ -2,7 +2,6 @@
 This package allows you to query the data.  
 It was built with python3.6 and uses the lovely sqlalchemy api to allow for easy query serialization.
 
-View the JSON API specification at https://www.yuvalboss.com/api/
 
 #### structure
     .
