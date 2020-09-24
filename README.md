@@ -1,4 +1,4 @@
-# noaadb api
+# noaadb SDK
 This package allows you to query the data.  
 It was built with python3.6 and uses the lovely sqlalchemy api to allow for easy query serialization.
 
