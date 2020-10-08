@@ -1,7 +1,7 @@
 import enum
 
 from sqlalchemy import Column, ForeignKey, \
-    MetaData, Integer, UniqueConstraint
+    MetaData, Integer, UniqueConstraint, Float
 from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -25,10 +25,11 @@ class NUC(MLBase):
                 Sequence('nuc_seq', start=1, increment=1, metadata=ml_meta),
                 primary_key=True)
 
-    ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name, ondelete="CASCADE"))
+    ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name, ondelete="CASCADE"), unique=True)
     ir_image = relationship(IRImage)
-    __table_args__ = (UniqueConstraint('ir_image_id'),
-                      {'schema': "ml_data"})
+
+    normed_value = Column(Float)
+    raw_value = Column(Float)
 
     def __repr__(self):
         return "<NUC(id='{}', ir_image_id='{}')>" \

@@ -1,5 +1,5 @@
 import unittest
-import noaadb
+from noaadb import Session
 from noaadb.api.queries import get_eo_images, get_ir_images
 from noaadb.schema.models import *
 from sqlalchemy import desc
@@ -7,7 +7,7 @@ from sqlalchemy import desc
 
 class SessionTestCase(unittest.TestCase):
     def test_session(self):
-        s = noaadb.Session()
+        s = Session()
         s.close()
 
 num_images_per_flight = \
@@ -31,7 +31,7 @@ num_images_per_flight = \
     }
 class KotzImagesTestCase(unittest.TestCase):
     def test_number_images(self):
-        s = noaadb.Session()
+        s = Session()
         eo_images = get_eo_images(s, survey='test_kotz_2019')
         self.assertEqual(len(eo_images), 72542) # number of eo images
         ir_images = get_ir_images(s, survey='test_kotz_2019')
@@ -49,7 +49,7 @@ class KotzImagesTestCase(unittest.TestCase):
         s.close()
 
     def test_number_images_per_flight(self):
-        s = noaadb.Session()
+        s = Session()
         for fl in num_images_per_flight:
             for cam in num_images_per_flight[fl]:
                 eo_images = get_eo_images(s, survey='test_kotz_2019', flight=fl, cam=cam)
@@ -61,7 +61,7 @@ class KotzImagesTestCase(unittest.TestCase):
     # check that flight durations seem reasonable aka. that I didn't import data with a faulty timestamp parser
     def test_timestamps_by_flight(self):
         seconds_in_hour = 3600
-        s = noaadb.Session()
+        s = Session()
         for fl in num_images_per_flight:
             cams_in_flight_durations = []
             for cam in num_images_per_flight[fl]:

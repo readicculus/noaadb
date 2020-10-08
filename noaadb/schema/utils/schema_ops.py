@@ -4,6 +4,7 @@ from noaadb import DATABASE_URI
 from noaadb.schema.models.label_data import LabelBase
 from noaadb.schema.models.ml_data import MLBase
 from noaadb.schema.models.survey_data import SurveyDataBase
+from noaadb.schema.models.utilities import UtilitiesBase
 
 
 def drop_survey_schema(engine,tables_only=True):
@@ -24,6 +25,12 @@ def drop_ml_schema(engine,tables_only=True):
     MLBase.metadata.drop_all(engine)
     print("Dropped ml_data schema")
 
+def drop_utilities_schema(engine,tables_only=True):
+    if not tables_only:
+        engine.execute(DDL("DROP SCHEMA IF EXISTS utilities CASCADE"))
+    UtilitiesBase.metadata.drop_all(engine)
+    print("Dropped utilities schema")
+
 def create_survey_schema(engine,tables_only=True):
     if not tables_only:
         engine.execute(DDL("CREATE SCHEMA IF NOT EXISTS survey_data"))
@@ -41,3 +48,7 @@ def create_ml_schema(engine,tables_only=True):
         engine.execute(DDL("CREATE SCHEMA IF NOT EXISTS ml_data"))
     MLBase.metadata.create_all(engine, checkfirst=False)
 
+def create_utilities_schema(engine,tables_only=True):
+    if not tables_only:
+        engine.execute(DDL("CREATE SCHEMA IF NOT EXISTS utilities"))
+    UtilitiesBase.metadata.create_all(engine, checkfirst=False)
