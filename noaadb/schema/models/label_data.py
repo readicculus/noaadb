@@ -107,6 +107,7 @@ class LabelEntry(ConcreteBase, LabelBase):
 
     def to_dict(cls):
         res = {
+            'id': cls.id,
             'image_id': cls.image_id,
             'x1': cls.x1,
             'x2': cls.x2,
