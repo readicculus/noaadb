@@ -7,7 +7,7 @@ from noaadb.schema.models import *
 
 
 def qb_image_without_sightings(type: str, surveys: List[str] = [], flights: List[str] = [], cams: List[str] = [],
-                               sizes= []) -> Query:
+                               sizes = []) -> Query:
     """Builds a query for getting images from the database
 
     :param str type: Type of image ('eo' or 'ir')
