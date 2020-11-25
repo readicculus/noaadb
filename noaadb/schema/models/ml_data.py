@@ -19,13 +19,29 @@ ml_schema_name = 'ml_data'
 ml_meta = MetaData(schema='ml_data')
 MLBase = declarative_base(metadata=ml_meta)
 
+# class UpdatedLabels(MLBase):
+#     __tablename__ = 'updated_labels'
+#     id = Column(Integer,
+#                 Sequence('updated_labels_seq', start=1, increment=1, metadata=ml_meta),
+#                 primary_key=True)
+#
+#     parent_id = Column(Integer, ForeignKey(LabelEntry.id, ondelete="CASCADE"),unique=True)
+#     parent = relationship(IRImage)
+#
+#     normed_value = Column(Float)
+#     raw_value = Column(Float)
+#
+#     def __repr__(self):
+#         return "<NUC(id='{}', ir_image_id='{}')>" \
+#             .format(self.id, self.ir_image_id)
+
 class NUC(MLBase):
     __tablename__ = 'nucs'
     id = Column(Integer,
                 Sequence('nuc_seq', start=1, increment=1, metadata=ml_meta),
                 primary_key=True)
 
-    ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name, ondelete="CASCADE"), unique=True)
+    ir_image_id = Column(FILENAME, ForeignKey(IRImage.event_key, ondelete="CASCADE"), unique=True)
     ir_image = relationship(IRImage)
 
     normed_value = Column(Float)
@@ -149,8 +165,8 @@ class NUC(MLBase):
 class TrainTestSplit(MLBase):
     __tablename__ = 'train_test_split'
     id = Column(Integer, autoincrement=True, primary_key=True)
-    image_id = Column(FILENAME, ForeignKey(EOImage.file_name, ondelete="CASCADE"), nullable=False, unique=True)
-    image = relationship(EOImage, foreign_keys=[image_id])
+    image_id = Column(FILENAME, ForeignKey(IRImage.event_key, ondelete="CASCADE"), nullable=False, unique=True)
+    image = relationship(IRImage, foreign_keys=[image_id])
     type = Column(ENUM(MLType, name="ml_type_enum", metadata=ml_meta, schema=ml_schema_name, create_type=True), nullable=False)
 
     def to_dict(self):

@@ -10,11 +10,15 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 
-from noaadb.schema import FILENAME, FILEPATH
-schema_name = 'survey_data'
-sd_meta = MetaData(schema=schema_name)
-SurveyDataBase = declarative_base(metadata=sd_meta)
 
+from noaadb.schema import FILENAME, FILEPATH
+
+schema_name = 'survey_data'
+# sd_meta = MetaData(schema=schema_name)
+# SurveyDataBase = declarative_base(metadata=sd_meta)
+Base = declarative_base()
+
+SurveyDataBase = Base
 
 ####
 # Survey schema models
@@ -27,12 +31,14 @@ class ImageType(enum.IntEnum):
 
 class Survey(SurveyDataBase):
     __tablename__ = 'survey'
+    __table_args__ = {'schema': schema_name}
     id = Column(Integer, autoincrement=True, primary_key=True)
     name = Column(String(50), unique=True)
 
 
 class Flight(SurveyDataBase):
     __tablename__ = 'flight'
+    __table_args__ = {'schema': schema_name}
     id = Column(Integer, autoincrement=True, primary_key=True)
     flight_name = Column(String(50), unique=True)
 
@@ -46,6 +52,7 @@ class Flight(SurveyDataBase):
 
 class Camera(SurveyDataBase):
     __tablename__ = 'camera'
+    __table_args__ = {'schema': schema_name}
     id = Column(Integer, autoincrement=True, primary_key=True)
     cam_name = Column(String(20))
 
@@ -59,7 +66,9 @@ class Camera(SurveyDataBase):
 
 class HeaderMeta(SurveyDataBase):
     __tablename__ = 'header_meta'
+    __table_args__ = {'schema': schema_name}
     id = Column(Integer, autoincrement=True, primary_key=True)
+    event_key = Column(FILENAME, primary_key=True)
     stamp = Column(BigInteger)
     frame_id = Column(VARCHAR(10))
     seq = Column(Integer)
@@ -67,14 +76,15 @@ class HeaderMeta(SurveyDataBase):
     camera_id = Column(Integer, ForeignKey(Camera.id,
                              ondelete="CASCADE"))
     camera = relationship("Camera")
-    __table_args = (
-        UniqueConstraint(camera_id, stamp, name='_one_stamp_per_cam_header_meta'),
-    )
+    # __table_args = (
+    #     UniqueConstraint(camera_id, event_key,  name='_one_header_per_event'),
+    # )
 
 
 class InstrumentMeta(SurveyDataBase):
     __tablename__ = 'instrument_meta'
-    id = Column(Integer, autoincrement=True, primary_key=True)
+    __table_args__ = {'schema': schema_name}
+    event_key = Column(FILENAME, primary_key=True)
     track_angle = Column(Float)
     angular_rate_x = Column(Float)
     angular_rate_y = Column(Float)
@@ -95,23 +105,21 @@ class InstrumentMeta(SurveyDataBase):
     heading = Column(Float)
     east_velocity = Column(Float)
     acceleration_z = Column(Float)
-    header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id,
-                             ondelete="CASCADE"), unique=True, nullable=False)
-    header_meta = relationship("HeaderMeta")#, backref=backref('ins', uselist=False, lazy='select'))
 
-class EventMeta(SurveyDataBase):
-    __tablename__ = 'evt_meta'
-    id = Column(Integer, autoincrement=True, primary_key=True)
-    event_port = Column(Integer)
-    event_num = Column(Integer)
-    time = Column(Float)
-
-    header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id,
-                             ondelete="CASCADE"), nullable=False, unique=True)
-    header_meta = relationship("HeaderMeta")#, backref=backref('evt', uselist=False, lazy='select'))
+# class EventMeta(SurveyDataBase):
+#     __tablename__ = 'evt_meta'
+#     id = Column(Integer, autoincrement=True, primary_key=True)
+#     event_port = Column(Integer)
+#     event_num = Column(Integer)
+#     time = Column(Float)
+#
+#     header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id,
+#                              ondelete="CASCADE"), nullable=False, unique=True)
+#     header_meta = relationship("HeaderMeta")#, backref=backref('evt', uselist=False, lazy='select'))
 
 class Homography(SurveyDataBase):
     __tablename__ = 'homography'
+    __table_args__ = {'schema': schema_name}
 
     id = Column(Integer, autoincrement=True, primary_key=True)
     h00 = Column(Float, nullable=False)
@@ -136,11 +144,14 @@ class Homography(SurveyDataBase):
                          [self.h20,self.h21,self.h22]])
 
 
+
 class EOImage(SurveyDataBase):
     __tablename__ = 'eo_image'
-    file_name = Column(FILENAME, primary_key=True)
-    file_path = Column(FILEPATH, nullable=False)
-    type = Column(ENUM(ImageType, name="im_type_enum", metadata=sd_meta, create_type=True), nullable=False)
+    __table_args__ = {'schema': schema_name}
+    event_key = Column(FILENAME, primary_key=True)
+    filename = Column(FILENAME)
+    directory = Column(FILEPATH)
+    # type = Column(ENUM(ImageType, name="im_type_enum", metadata=sd_meta, create_type=True), nullable=False)
     foggy = Column(BOOLEAN)
     quality = Column(Integer)
     width = Column(Integer, nullable=False)
@@ -151,34 +162,37 @@ class EOImage(SurveyDataBase):
     is_bigendian = Column(BOOLEAN)
     step = Column(Integer)
     encoding = Column(VARCHAR(20))
-    header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=True)
-    header_meta = relationship("HeaderMeta")#, backref=backref('eo_image', uselist=False, lazy='select'))
+    camera_id = Column(Integer, ForeignKey(Camera.id,
+                             ondelete="CASCADE"))
+    camera = relationship("Camera")
+    @hybrid_property
+    def camera_name(self): return self.camera.cam_name
+    @hybrid_property
+    def flight(self): return self.camera.flight.flight_name
+    @hybrid_property
+    def survey(self): return self.camera.flight.survey.name
 
-    @hybrid_property
-    def camera(self): return self.header_meta.camera.cam_name
-    @hybrid_property
-    def flight(self): return self.header_meta.camera.flight.flight_name
-    @hybrid_property
-    def survey(self): return self.header_meta.camera.flight.survey.name
-
-    @hybrid_property
-    def guid(self):
-        # TODO only works for kotz
-        return self.file_name.replace('_rgb.jpg', '')
+    labels = relationship('Annotation', backref='eo_image',
+                 primaryjoin='Annotation.event_key==EOImage.event_key',
+                 foreign_keys='Annotation.event_key')
 
     def to_dict(self):
         res = {'w': self.width,
                'h': self.height,
                'c': self.depth,
-               'filename': self.file_name,
-               'filepath': self.file_path}
+               'filename': self.filename,
+               # 'filepath': self.file_path
+               }
         return res
 
 class IRImage(SurveyDataBase):
     __tablename__ = 'ir_image'
-    file_name = Column(FILENAME, primary_key=True)
-    file_path = Column(FILEPATH, nullable=False)
-    type = Column(ENUM(ImageType, name="im_type_enum", metadata=sd_meta, create_type=False), nullable=False)
+    __table_args__ = {'schema': schema_name}
+    event_key = Column(FILENAME, primary_key=True)
+    filename = Column(FILENAME)
+    directory = Column(FILEPATH)
+    # file_path = Column(FILEPATH, nullable=False)
+    # type = Column(ENUM(ImageType, name="im_type_enum", metadata=sd_meta, create_type=False), nullable=False)
     foggy = Column(BOOLEAN)
     quality = Column(Integer)
     width = Column(Integer, nullable=False)
@@ -189,63 +203,63 @@ class IRImage(SurveyDataBase):
     is_bigendian = Column(BOOLEAN)
     step = Column(Integer)
     encoding = Column(VARCHAR(20))
-    header_meta_id = Column(Integer, ForeignKey(HeaderMeta.id, ondelete="CASCADE"), unique=True, nullable=True)
-    header_meta = relationship("HeaderMeta")#, backref=backref('ir_image', uselist=False, lazy='select'))
+    labels = relationship('Annotation', backref='ir_image',
+                 primaryjoin='Annotation.event_key==IRImage.event_key',
+                 foreign_keys='Annotation.event_key')
 
+    camera_id = Column(Integer, ForeignKey(Camera.id, ondelete="CASCADE"))
+    camera = relationship("Camera")
     @hybrid_property
-    def camera(self): return self.header_meta.camera.cam_name
+    def camera_name(self): return self.camera.cam_name
     @hybrid_property
-    def flight(self): return self.header_meta.camera.flight.flight_name
+    def flight(self): return self.camera.flight.flight_name
     @hybrid_property
-    def survey(self): return self.header_meta.camera.flight.survey.name
-
-    @hybrid_property
-    def guid(self):
-        # TODO only works for kotz
-        return self.file_name.replace('_ir.tif', '')
-
+    def survey(self): return self.camera.flight.survey.name
     def to_dict(self):
         res = {'w': self.width,
                'h': self.height,
                'c': self.depth,
-               'filename': self.file_name,
-               'filepath': self.file_path}
+               'filename': self.filename,
+               #'filepath': self.file_path
+               }
         return res
 
-class FusedImage(SurveyDataBase):
-    __tablename__ = 'fused_image'
-    file_name = Column(FILENAME, primary_key=True)
-    s3_uri = Column(FILEPATH, nullable=False)
-    file_path = Column(FILEPATH, nullable=False)
-
-    width = Column(Integer, nullable=False)
-    height = Column(Integer, nullable=False)
-    depth = Column(Integer, nullable=False)
-
-    eo_image_id = Column(FILENAME, ForeignKey(EOImage.file_name))
-    eo_image = relationship(EOImage)
-    ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name))
-    ir_image = relationship(IRImage)
-    homography_id = Column(Integer, ForeignKey(Homography.id))
-    homography = relationship(Homography)
-
-    def to_dict(self):
-        res = {'w': self.width,
-               'h': self.height,
-               'c': self.depth,
-               'file_name': self.file_name,
-               'file_path': self.file_path}
-        return res
-
-class HeaderGroup(SurveyDataBase):
-    __tablename__ = 'header_group'
-    id = Column(Integer, autoincrement=True, primary_key=True)
-    eo_image_id = Column(FILENAME, ForeignKey(EOImage.file_name, ondelete="CASCADE"))
-    eo_image = relationship(EOImage)
-    ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name, ondelete="CASCADE"))
-    ir_image = relationship(IRImage)
-    evt_header_id = Column(Integer, ForeignKey(EventMeta.id, ondelete="CASCADE"))
-    evt_header_meta = relationship("EventMeta")
+# class FusedImage(SurveyDataBase):
+#     __tablename__ = 'fused_image'
+#     file_name = Column(FILENAME, primary_key=True)
+#     s3_uri = Column(FILEPATH, nullable=False)
+#     file_path = Column(FILEPATH, nullable=False)
+#
+#     width = Column(Integer, nullable=False)
+#     height = Column(Integer, nullable=False)
+#     depth = Column(Integer, nullable=False)
+#
+#     eo_image_id = Column(FILENAME, ForeignKey(EOImage.file_name))
+#     eo_image = relationship(EOImage)
+#     ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name))
+#     ir_image = relationship(IRImage)
+#     homography_id = Column(Integer, ForeignKey(Homography.id))
+#     homography = relationship(Homography)
+#
+#     def to_dict(self):
+#         res = {'w': self.width,
+#                'h': self.height,
+#                'c': self.depth,
+#                'file_name': self.file_name,
+#                'file_path': self.file_path}
+#         return res
+#
+# class HeaderGroup(SurveyDataBase):
+#     __tablename__ = 'header_group'
+#     id = Column(Integer, autoincrement=True, primary_key=True)
+#     eo_image_id = Column(FILENAME, ForeignKey(EOImage.file_name, ondelete="CASCADE"))
+#     eo_image = relationship(EOImage)
+#     ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name, ondelete="CASCADE"))
+#     ir_image = relationship(IRImage)
+#     evt_header_id = Column(Integer, ForeignKey(EventMeta.id, ondelete="CASCADE"))
+#     evt_header_meta = relationship("EventMeta")
+#     ins_header_id = Column(Integer, ForeignKey(InstrumentMeta.id, ondelete="CASCADE"))
+#     ins_header_meta = relationship("InstrumentMeta")
 
 
 DBImage = TypeVar('DBImage', EOImage, IRImage)
