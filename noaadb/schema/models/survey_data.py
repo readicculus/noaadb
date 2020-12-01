@@ -38,7 +38,6 @@ class Survey(SurveyDataBase):
 
 class Flight(SurveyDataBase):
     __tablename__ = 'flight'
-    __table_args__ = {'schema': schema_name}
     id = Column(Integer, autoincrement=True, primary_key=True)
     flight_name = Column(String(50), unique=True)
 
@@ -46,13 +45,12 @@ class Flight(SurveyDataBase):
     survey = relationship(Survey)
     __table_args__ = (
         UniqueConstraint(survey_id, flight_name,
-                         name='flight_unique_constraint'),
+                         name='flight_unique_constraint'),{'schema': schema_name},
     )
 
 
 class Camera(SurveyDataBase):
     __tablename__ = 'camera'
-    __table_args__ = {'schema': schema_name}
     id = Column(Integer, autoincrement=True, primary_key=True)
     cam_name = Column(String(20))
 
@@ -60,7 +58,7 @@ class Camera(SurveyDataBase):
     flight = relationship(Flight)
     __table_args__ = (
         UniqueConstraint(flight_id,cam_name,
-                         name='cam_unique_constraint'),
+                         name='cam_unique_constraint'), {'schema': schema_name},
     )
 
 
@@ -169,12 +167,13 @@ class EOImage(SurveyDataBase):
     def camera_name(self): return self.camera.cam_name
     @hybrid_property
     def flight(self): return self.camera.flight.flight_name
-    @hybrid_property
-    def survey(self): return self.camera.flight.survey.name
+    # @hybrid_property
+    # def survey(self):
+    #     return self.camera.flight.survey.name
 
-    labels = relationship('Annotation', backref='eo_image',
-                 primaryjoin='Annotation.event_key==EOImage.event_key',
-                 foreign_keys='Annotation.event_key')
+    # labels = relationship('Annotation', backref='eo_image',
+    #              primaryjoin='Annotation.eo_event_key==EOImage.event_key',
+    #              foreign_keys='Annotation.eo_event_key')
 
     def to_dict(self):
         res = {'w': self.width,
@@ -203,9 +202,9 @@ class IRImage(SurveyDataBase):
     is_bigendian = Column(BOOLEAN)
     step = Column(Integer)
     encoding = Column(VARCHAR(20))
-    labels = relationship('Annotation', backref='ir_image',
-                 primaryjoin='Annotation.event_key==IRImage.event_key',
-                 foreign_keys='Annotation.event_key')
+    # labels = relationship('Annotation', backref='ir_image',
+    #              primaryjoin='Annotation.ir_event_key==IRImage.event_key',
+    #              foreign_keys='Annotation.ir_event_key')
 
     camera_id = Column(Integer, ForeignKey(Camera.id, ondelete="CASCADE"))
     camera = relationship("Camera")
@@ -213,8 +212,9 @@ class IRImage(SurveyDataBase):
     def camera_name(self): return self.camera.cam_name
     @hybrid_property
     def flight(self): return self.camera.flight.flight_name
-    @hybrid_property
-    def survey(self): return self.camera.flight.survey.name
+    # @hybrid_property
+    # def survey(self):
+    #     return self.camera.flight.survey.name
     def to_dict(self):
         res = {'w': self.width,
                'h': self.height,

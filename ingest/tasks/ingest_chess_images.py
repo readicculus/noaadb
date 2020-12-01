@@ -100,7 +100,7 @@ class AggregateCHESSImagesTask(luigi.Task):
             yield IngestCHESSDirectoryTask(image_dir=image_dir, survey=self.survey)
 
     def output(self):
-        return None
+        return self.input()
 
     # Ingest All Images
     def run(self):

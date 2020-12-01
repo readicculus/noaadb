@@ -1,15 +1,18 @@
 import glob
+import json
 import logging
 import os
 
 import luigi
 from luigi.contrib import sqla
+from sqlalchemy import or_
+from sqlalchemy.orm import aliased
 
 from ingest.tasks.create_tables import CreateTableTask
 from ingest.tasks.ingest_kotz_images import AggregateKotzImagesTask
-from ingest.util.image_utilities import file_key, parse_chess_fn, safe_int_cast, flight_cam_id_from_dir
+from ingest.util.image_utilities import file_key, flight_cam_id_from_dir
 from noaadb import Session, DATABASE_URI
-from noaadb.schema.models import EOImage, IRImage, BoundingBox, Annotation
+from noaadb.schema.models import EOImage, IRImage, BoundingBox, Annotation, Camera, Flight, Survey
 import pandas as pd
 import numpy as np
 
@@ -19,12 +22,15 @@ from noaadb.schema.utils.queries import add_worker_if_not_exists, add_job_if_not
 class JoinDirectoryEOIRCSVTask(luigi.Task):
     directory = luigi.Parameter()
     output_root = luigi.Parameter()
+    flight_id = luigi.Parameter()
+    cam_id = luigi.Parameter()
 
     def output(self):
-        flight_id, cam_id = flight_cam_id_from_dir(str(self.directory))
-        fn = '%s_%s_merged.csv' % (flight_id, cam_id)
-        fp = os.path.join(str(self.output_root), fn)
-        return luigi.LocalTarget(fp)
+        fn_csv = '%s_%s_merged.csv' % (self.flight_id, self.cam_id)
+        fp_csv = os.path.join(str(self.output_root), fn_csv)
+        fn_json = '%s_%s_info.json' % (self.flight_id, self.cam_id)
+        fp_json = os.path.join(str(self.output_root), fn_json)
+        return {'csv': luigi.LocalTarget(fp_csv), 'json': luigi.LocalTarget(fp_json)}
 
     def load_dataframe(self, csv_path: str, suffix: str) -> pd.DataFrame:
         # VIAME Detection CSV format
@@ -80,8 +86,13 @@ class JoinDirectoryEOIRCSVTask(luigi.Task):
         merged.rename(columns=col_map, inplace=True)
         merged.drop(cols_remove, axis=1, inplace=True)
         merged.species.fillna('UNK', inplace=True)
-        with self.output().open('w') as f:
+        merged = merged.loc[merged['species'] != 'incorrect']
+        logger.info('Saving %d Annotations to csv %s.' % (len(merged), self.output()['csv'].path))
+        with self.output()['csv'].open('w') as f:
             merged.to_csv(f, index=False)
+
+        with self.output()['json'].open('w') as f:
+            f.write(json.dumps({'flight_id': self.flight_id, 'cam_id': self.cam_id, 'annotation_count': len(merged)}))
 
 
 # class AggregateKotzDetectionsTask(luigi.Task):
@@ -100,6 +111,7 @@ class JoinDirectoryEOIRCSVTask(luigi.Task):
 
 class LoadKotzDetectionsTask(luigi.Task):
     directory = luigi.Parameter()
+    survey = luigi.Parameter()
     species_map = {'unknown_seal': 'UNK Seal',
                    'unknown_pup': 'UNK Seal',
                    'ringed_seal': 'Ringed Seal',
@@ -115,18 +127,54 @@ class LoadKotzDetectionsTask(luigi.Task):
     def requires(self):
         yield CreateTableTask(
             children=["Job", "Worker", "Species", "BoundingBox", "Annotation"])
-        yield JoinDirectoryEOIRCSVTask(directory=self.directory)
+        flight_id, cam_id = flight_cam_id_from_dir(str(self.directory))
+        yield JoinDirectoryEOIRCSVTask(directory=self.directory, flight_id=flight_id, cam_id=cam_id)
 
     # make flag in db that this detection file was loaded
     def output(self):
-        return sqla.SQLAlchemyTarget(DATABASE_URI, 'LoadKotzDetectionsTask', os.path.basename(str(self.input()[1].fn)), echo=False)
+        return sqla.SQLAlchemyTarget(DATABASE_URI, 'LoadKotzDetectionsTask', os.path.basename(str(self.input()[1]['csv'].path)), echo=False)
+
+    def cleanup(self):
+        # Cleans up/deletes all Annotation and BoundingBox objects associated with this task's flight and cam id
+        flight_id, cam_id = flight_cam_id_from_dir(str(self.directory))
+        survey = self.survey
+
+        s = Session()
+        cam_obj = s.query(Camera)\
+            .filter(Camera.cam_name == cam_id)\
+            .join(Flight).filter(Flight.flight_name == flight_id)\
+            .join(Survey).filter(Survey.name == survey).first()
+        annotations = s.query(Annotation).join(IRImage, IRImage.event_key == Annotation.ir_event_key)\
+            .filter(IRImage.camera_id == cam_obj.id).all()
+        annotations += s.query(Annotation).join(EOImage, EOImage.event_key == Annotation.eo_event_key)\
+            .filter(EOImage.camera_id == cam_obj.id).all()
+        to_remove = list({a.id: a for a in annotations}.keys())
+        boxes_to_remove = []
+        for x in annotations:
+            boxes_to_remove.append(x.ir_box_id)
+            boxes_to_remove.append(x.eo_box_id)
+        if len(to_remove) > 0:
+            removed = s.query(BoundingBox).filter(BoundingBox.id.in_(boxes_to_remove)).delete(synchronize_session=False)
+            s.commit()
+            removed = s.query(Annotation).filter(Annotation.id.in_(to_remove)).delete(synchronize_session=False)
+            s.commit()
+
+        s.flush()
+        # verify none
+        annotations = s.query(Annotation).join(IRImage, IRImage.event_key == Annotation.ir_event_key) \
+            .filter(IRImage.camera_id == cam_obj.id).all()
+        annotations += s.query(Annotation).join(EOImage, EOImage.event_key == Annotation.eo_event_key) \
+            .filter(EOImage.camera_id == cam_obj.id).all()
+        assert (len(annotations) == 0)
+        s.close()
 
     def run(self):
+        self.cleanup()
         s = Session()
         eo_worker = add_worker_if_not_exists(s, 'Gavin', True)
         job = add_job_if_not_exists(s, 'kotz_manual_review', '')
         ir_worker = add_worker_if_not_exists(s, 'Projected', False)
-        merged_csv_fp = self.input()[1].fn
+        merged_csv_fp = self.input()[1]['csv'].path
         flight_cam_str = os.path.basename(str(merged_csv_fp)).replace('_merged.csv', '')
         df = pd.read_csv(str(merged_csv_fp))
 
@@ -160,7 +208,8 @@ class LoadKotzDetectionsTask(luigi.Task):
             s.add(ir_box)
             s.flush()
             is_pup = not pd.isnull(row.species) and 'pup' in row.species
-            annot = Annotation(event_key=row.event_key,
+            annot = Annotation(eo_event_key=row.event_key,
+                               ir_event_key=row.event_key,
                                ir_box=ir_box,
                                eo_box=eo_box,
                                species=species_obj,
@@ -171,20 +220,19 @@ class LoadKotzDetectionsTask(luigi.Task):
             s.add(annot)
             s.flush()
         s.commit()
+        s.close()
         self.output().touch()
 
 class IngestKotzDetectionsTask(luigi.Task):
     image_directories = luigi.ListParameter()
+    survey = luigi.Parameter()
 
     def requires(self):
         req = {}
         yield AggregateKotzImagesTask()
         for directory in list(self.image_directories):
-            req[directory] = LoadKotzDetectionsTask(directory=directory)
+            req[directory] = LoadKotzDetectionsTask(directory=directory, survey = self.survey)
         yield req
 
-        return {'AggregateKotzImagesTask': AggregateKotzImagesTask(),
-                'CreateTableTask': CreateTableTask(
-                    children=["Job", "Worker", "Species", "BoundingBox", "Annotation"])
-        }
+
 

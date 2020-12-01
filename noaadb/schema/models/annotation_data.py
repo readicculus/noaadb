@@ -10,7 +10,7 @@ from sqlalchemy.orm import validates, relationship
 from sqlalchemy.schema import CheckConstraint, Sequence
 
 from noaadb.schema import JOBWORKERNAME, FILENAME, FILEPATH
-from noaadb.schema.models import Base
+from noaadb.schema.models import Base, EOImage, IRImage
 
 schema_name = 'annotation_data'
 # label_meta = MetaData(schema=schema_name)
@@ -59,7 +59,7 @@ class BoundingBox(DetectionBase):
     x2 = Column(Integer)
     y1 = Column(Integer)
     y2 = Column(Integer)
-    confidence = Column(Float)
+    confidence = Column(VARCHAR(32))
     worker_id = Column(JOBWORKERNAME, ForeignKey(Worker.name), nullable=False)
     worker = relationship(Worker)
     job_id = Column(JOBWORKERNAME, ForeignKey(Job.name), nullable=False)
@@ -76,7 +76,8 @@ class Annotation(DetectionBase):
 
     id = Column(Integer, autoincrement=True, primary_key=True)
 
-    event_key = Column(FILENAME, nullable=False)
+    eo_event_key = Column(FILENAME, ForeignKey(EOImage.event_key, ondelete='CASCADE'), nullable=False)
+    ir_event_key = Column(FILENAME, ForeignKey(IRImage.event_key, ondelete='CASCADE'), nullable=False)
     # eo_image = relationship("EOImage", primaryjoin="foreign(Annotation.event_key)==EOImage.event_key")
     # ir_image = relationship("EOImage", primaryjoin="foreign(Annotation.event_key)==IRImage.event_key")
     # ir_image = relationship('IRImage', back_populates='labels',
@@ -93,8 +94,8 @@ class Annotation(DetectionBase):
     is_shadow = Column(BOOLEAN, nullable=True)
 
     ir_box_id = Column(Integer, ForeignKey(BoundingBox.id, ondelete='CASCADE'))
-    ir_box = relationship(BoundingBox,foreign_keys=[ir_box_id])
+    ir_box = relationship(BoundingBox,foreign_keys=[ir_box_id], cascade="all,delete")
     eo_box_id = Column(Integer, ForeignKey(BoundingBox.id, ondelete='CASCADE'))
-    eo_box = relationship(BoundingBox,foreign_keys=[eo_box_id])
+    eo_box = relationship(BoundingBox,foreign_keys=[eo_box_id], cascade="all,delete")
 
 

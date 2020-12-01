@@ -1,8 +1,8 @@
 sudo su postgres
 cd ~/
-pg_dump dbname=noaa_test -f noaadb_test.sql
+pg_dump -h pepdb.c1twklssgqoz.us-west-2.rds.amazonaws.com -p 5432 -U postgres dbname=noaadb -f backup.sql
 psql \
-   -f noaadb_test.sql \
+   -f backup.sql \
    --host noaadb.xxx.xxx.rds.amazonaws.com \
    --port 5432 \
    --username postgres \

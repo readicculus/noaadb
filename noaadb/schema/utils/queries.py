@@ -1,7 +1,6 @@
 from sqlalchemy import and_
 
-from noaadb.schema.models import Species, Job, Worker, EOIRLabelPair, \
-    EOIRLabelPair, LabelEntry, IRLabelEntry, EOLabelEntry, Survey, Flight, Camera
+from noaadb.schema.models import Species, Job, Worker, Survey, Flight, Camera
 
 
 # filter queries
@@ -9,23 +8,23 @@ from noaadb.schema.models import Species, Job, Worker, EOIRLabelPair, \
 def unidentified_labels(q):
     return q.filter_by(hotspot_id=None)
 # Constrained gets
-def get_existing_eo_label(session, label):
-    return session.query(EOLabelEntry).filter_by(image_id=label.image_id,
-                                                       x1=label.x1,
-                                                       x2=label.x2,
-                                                       y1=label.y1,
-                                                       y2=label.y2).first()
-
-def get_existing_ir_label(session, label):
-    return session.query(IRLabelEntry).filter_by(image=label.image,
-                                                       x1=label.x1,
-                                                       x2=label.x2,
-                                                       y1=label.y1,
-                                                       y2=label.y2).first()
-
-def get_existing_sighting(session, sighting):
-    return session.query(EOIRLabelPair).filter_by(eo_label=sighting.eo_label,
-                                                  ir_label=sighting.ir_label).first()
+# def get_existing_eo_label(session, label):
+#     return session.query(EOLabelEntry).filter_by(image_id=label.image_id,
+#                                                        x1=label.x1,
+#                                                        x2=label.x2,
+#                                                        y1=label.y1,
+#                                                        y2=label.y2).first()
+#
+# def get_existing_ir_label(session, label):
+#     return session.query(IRLabelEntry).filter_by(image=label.image,
+#                                                        x1=label.x1,
+#                                                        x2=label.x2,
+#                                                        y1=label.y1,
+#                                                        y2=label.y2).first()
+#
+# def get_existing_sighting(session, sighting):
+#     return session.query(EOIRLabelPair).filter_by(eo_label=sighting.eo_label,
+#                                                   ir_label=sighting.ir_label).first()
 # def get_existing_falsepositive(session, hs):
 #     return session.query(FalsePositiveLabels).filter_by(eo_label=hs.eo_label,
 #                                                         ir_label=hs.ir_label).first()
@@ -80,15 +79,15 @@ def job_exists(session, job_name):
 def worker_exists(session, name):
     return session.query(session.query(Worker).filter_by(name=name).deleted()).scalar()
 
-def label_exists(session, label):
-    return session.query(session.query(LabelEntry)
-                         .filter(LabelEntry.hotspot_id.like(str(label.hotspot_id)))
-                         .filter_by(image=label.image,
-                                    species=label.species,
-                                    x1=label.x1,
-                                    x2=label.x2,
-                                    y1=label.y1,
-                                    y2=label.y2).deleted()).scalar()
+# def label_exists(session, label):
+#     return session.query(session.query(LabelEntry)
+#                          .filter(LabelEntry.hotspot_id.like(str(label.hotspot_id)))
+#                          .filter_by(image=label.image,
+#                                     species=label.species,
+#                                     x1=label.x1,
+#                                     x2=label.x2,
+#                                     y1=label.y1,
+#                                     y2=label.y2).deleted()).scalar()
 
 def add_job_if_not_exists(session, name, path):
     j = session.query(Job).filter_by(name=name).first()
@@ -115,14 +114,13 @@ def add_worker_if_not_exists(session, name, is_human):
 
     return w
 
-def add_worker_if_not_exists(session, name, is_human):
-    w = get_worker(session, name)
-    if not w:
-        w = Worker(
-            name=name,
-            human=is_human
+def add_species_if_not_exist(session, name):
+    s = get_species(session, name)
+    if not s:
+        s = Species(
+            name=name
         )
-        session.add(w)
+        session.add(s)
         session.flush()
 
-    return w
+    return s
