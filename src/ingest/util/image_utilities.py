@@ -2,9 +2,6 @@ import json
 import os
 from datetime import datetime
 
-from ingest.util.image_size import get_image_size
-from noaadb.schema.models import EOImage, IRImage
-
 
 def safe_float_cast(s):
     if s is None: return None

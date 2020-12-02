@@ -4,9 +4,10 @@ import luigi
 from luigi.contrib import sqla
 import pandas as pd
 
-from ingest.tasks.create_tables import CreateTableTask, BoundingBox, Annotation
-from ingest.tasks.ingest_chess_images import AggregateCHESSImagesTask
-from ingest.util.image_utilities import file_key
+from ingest.tasks import CreateTableTask, AggregateCHESSImagesTask
+from ingest.util import file_key
+
+
 from noaadb import DATABASE_URI, Session
 from noaadb.schema.models import *
 from noaadb.schema.utils.queries import add_species_if_not_exist, add_worker_if_not_exists, add_job_if_not_exists

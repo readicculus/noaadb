@@ -8,9 +8,9 @@ import logging
 ###
 from luigi.contrib import sqla
 
-from ingest.tasks.create_tables import CreateTableTask
-from ingest.util.image_size import get_image_size
-from ingest.util.image_utilities import file_key, MetaParser, safe_int_cast, parse_kotz_filename, safe_float_cast
+from ingest.tasks import CreateTableTask
+from ingest.util import get_image_size
+from ingest.util import file_key, MetaParser, safe_int_cast, parse_kotz_filename, safe_float_cast
 from noaadb import Session, DATABASE_URI
 from noaadb.schema.models import HeaderMeta, EOImage, IRImage, InstrumentMeta
 from noaadb.schema.utils.queries import add_or_get_cam_flight_survey

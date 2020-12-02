@@ -5,12 +5,10 @@ import os
 
 import luigi
 from luigi.contrib import sqla
-from sqlalchemy import or_
-from sqlalchemy.orm import aliased
 
-from ingest.tasks.create_tables import CreateTableTask
-from ingest.tasks.ingest_kotz_images import AggregateKotzImagesTask
-from ingest.util.image_utilities import file_key, flight_cam_id_from_dir
+from ingest.tasks import CreateTableTask
+from ingest.tasks import AggregateKotzImagesTask
+from ingest.util import file_key, flight_cam_id_from_dir
 from noaadb import Session, DATABASE_URI
 from noaadb.schema.models import EOImage, IRImage, BoundingBox, Annotation, Camera, Flight, Survey
 import pandas as pd
@@ -233,6 +231,9 @@ class IngestKotzDetectionsTask(luigi.Task):
         for directory in list(self.image_directories):
             req[directory] = LoadKotzDetectionsTask(directory=directory, survey = self.survey)
         yield req
+
+    def output(self):
+        return self.input()
 
 
 

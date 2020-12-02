@@ -8,7 +8,7 @@ from luigi.contrib.sqla import SQLAlchemyTarget
 from sqlalchemy import DDL
 
 from noaadb import DATABASE_URI, engine
-from noaadb.schema.models import *
+from noaadb.schema.models import * # DO NOT DELETE EVEN IF MARKED AS UNUSED IMPORT
 
 class NOAADBTableTarget(luigi.Target):
     Connection = collections.namedtuple("Connection", "engine pid")
