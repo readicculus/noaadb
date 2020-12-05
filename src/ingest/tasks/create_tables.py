@@ -83,3 +83,4 @@ class CreateTableTask(luigi.Task):
 
     def run(self):
         self.output().touch()
+

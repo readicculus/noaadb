@@ -15,6 +15,7 @@ setup(
        "sqlalchemy >= 1.3.13",
        "psycopg2 >= 2.8.4",
        "python-dotenv >= 0.14.0",
+       "pymongo >= 3.10.1",
    ],
    python_requires='>=3.6.8',
 )

@@ -6,18 +6,20 @@ import logging
 ###
 # Ingest Kotz Images
 ###
-from luigi.contrib import sqla
+from luigi.mock import MockTarget
 
+from core import SQLAlchemyCustomTarget, ForcibleTask
 from ingest.tasks import CreateTableTask
 from ingest.util import get_image_size
-from ingest.util import file_key, MetaParser, safe_int_cast, parse_kotz_filename, safe_float_cast
+from ingest.util import file_key, MetaParser, safe_int_cast, parse_kotz_filename, safe_float_cast, \
+    flight_cam_id_from_dir
 from noaadb import Session, DATABASE_URI
-from noaadb.schema.models import HeaderMeta, EOImage, IRImage, InstrumentMeta
+from noaadb.schema.models import *
 from noaadb.schema.utils.queries import add_or_get_cam_flight_survey
 
 KOTZ_MAPPINGS = {'CENT': 'C', 'LEFT': 'L', 'RIGHT': 'R', 'RGHT': 'R'}
-class IngestKotzDirectoryTask(luigi.Task):
-    device_dir = luigi.Parameter()
+class IngestKotzImageDirectoryTask(ForcibleTask):
+    directory = luigi.Parameter()
     survey = luigi.Parameter()
     # dry_run = luigi.BoolParameter
     progress_interval = luigi.IntParameter(default=100)
@@ -25,15 +27,46 @@ class IngestKotzDirectoryTask(luigi.Task):
         return CreateTableTask(children=["Survey", "Flight", "Camera", "HeaderMeta", "InstrumentMeta", "EOImage", "IRImage"])
 
     def output(self):
-        return sqla.SQLAlchemyTarget(DATABASE_URI, 'ingest_images', self.task_id, echo=False)
+        return SQLAlchemyCustomTarget(DATABASE_URI, 'ingest_images', self.task_id, echo=False)
+
+    def cleanup(self):
+        logger = logging.getLogger('luigi-interface')
+        flight_id, cam_id = flight_cam_id_from_dir(str(self.directory))
+
+        s = Session()
+        # get event_keys associated with this flight/cam
+        cam_obj = s.query(Camera)\
+            .filter(Camera.cam_name == cam_id)\
+            .join(Flight).filter(Flight.flight_name == flight_id)\
+            .join(Survey).filter(Survey.name == self.survey).first()
+        if cam_obj is None:
+            return
+        # get unique keys
+        ir_keys = s.query(IRImage.event_key).filter(IRImage.camera_id == cam_obj.id).all()
+        eo_keys = s.query(EOImage.event_key).filter(EOImage.camera_id == cam_obj.id).all()
+        logger.info('%d EO keys, %d IR keys to be removed' % (len(eo_keys), len(ir_keys)))
+        unique_event_keys = set(ir_keys+eo_keys)
+        # clear headers with those event keys
+        headers_removed = s.query(HeaderMeta).filter(HeaderMeta.event_key.in_(unique_event_keys)).delete(synchronize_session=False)
+        # clear ins with those event keys
+        ins_removed = s.query(InstrumentMeta).filter(InstrumentMeta.event_key.in_(unique_event_keys)).delete(synchronize_session=False)
+        # delete images with these keys
+        ir_ims_removed = s.query(IRImage).filter(IRImage.event_key.in_(unique_event_keys)).delete(synchronize_session=False)
+        eo_ims_removed = s.query(EOImage).filter(EOImage.event_key.in_(unique_event_keys)).delete(synchronize_session=False)
+        s.commit()
+        logger.info('Removed:'
+                    '\n%d header objects'
+                    '\n%d ins objects'
+                    '\n%d EO image objects'
+                    '\n%d IR image objects' % (headers_removed, ins_removed, eo_ims_removed, ir_ims_removed))
+        s.close()
+        self.output().remove()
 
     # Ingest All Images
     def run(self):
         logger = logging.getLogger('luigi-interface')
         # parse cam and flight id
-        p, c = os.path.split(str(self.device_dir))
-        flight_id = os.path.split(p)[1]
-        cam_id = KOTZ_MAPPINGS[c]
+        flight_id, cam_id = flight_cam_id_from_dir(str(self.directory))
 
         session = Session()
         # add cam to the database
@@ -41,9 +74,9 @@ class IngestKotzDirectoryTask(luigi.Task):
         session.commit()
 
         # get all
-        eo_files = glob.glob(os.path.join(str(self.device_dir), '*_rgb.jpg'))
-        ir_files = glob.glob(os.path.join(str(self.device_dir), '*_ir.tif'))
-        meta_files = glob.glob(os.path.join(str(self.device_dir), '*_meta.json'))
+        eo_files = glob.glob(os.path.join(str(self.directory), '*_rgb.jpg'))
+        ir_files = glob.glob(os.path.join(str(self.directory), '*_ir.tif'))
+        meta_files = glob.glob(os.path.join(str(self.directory), '*_meta.json'))
 
         # Group files by key for all  _ir, _rgb, _meta files.
         grouped_files = {}
@@ -69,7 +102,7 @@ class IngestKotzDirectoryTask(luigi.Task):
             meta = None
             for fn in files:
                 if fn.endswith('_meta.json'):
-                    meta = MetaParser(os.path.join(str(self.device_dir), fn))
+                    meta = MetaParser(os.path.join(str(self.directory), fn))
                     break
 
             # Add the header object
@@ -132,11 +165,11 @@ class IngestKotzDirectoryTask(luigi.Task):
                 c = 3 if im_type == 'rgb' else 1
                 w, h = safe_int_cast(im_meta.get("width")), safe_int_cast(im_meta.get("height"))
                 if w is None or h is None:
-                    w, h = get_image_size(os.path.join(str(self.device_dir), fn))
+                    w, h = get_image_size(os.path.join(str(self.directory), fn))
                 im_obj = ImageC(
                     event_key=event_key,
                     filename=fn,
-                    directory=self.device_dir,
+                    directory=self.directory,
                     width=w,
                     height=h,
                     depth=c,
@@ -151,37 +184,4 @@ class IngestKotzDirectoryTask(luigi.Task):
         session.commit()
         session.close()
         self.output().touch()
-
-class AggregateKotzImagesTask(luigi.Task):
-    image_directories = luigi.ListParameter()
-    survey = luigi.Parameter()
-    def requires(self):
-        # for device_dir in list(self.image_directories):
-        #     yield IngestKotzDirectoryTask(device_dir=device_dir, survey=self.survey)
-        #
-        return [IngestKotzDirectoryTask(device_dir=device_dir, survey=self.survey) for device_dir in list(self.image_directories)]
-
-    def output(self):
-        return self.input()
-
-# class IngestKotzImages(luigi.Task):
-#     def requires(self):
-#         parent_dir = "/data2/2019"
-#         subdirectories = ["fl01/CENT", "fl01/LEFT",
-#                           "fl04/CENT", "fl04/LEFT",
-#                           "fl05/CENT", "fl05/LEFT",
-#                           "fl06/CENT", "fl06/LEFT",
-#                           "fl07/CENT", "fl07/LEFT"]
-#         subdirectories = subdirectories[:2]
-#         image_directories = [os.path.join(parent_dir, sd) for sd in subdirectories]
-#         for im_dir in image_directories:
-#             yield IngestSurveyImagesTask(im_dir)
-#
-#     #
-#     def output(self):
-#         return None
-#
-#     # Ingest All Images
-#     def run(self):
-#         return None # print('ABC %s' % self.input())
 

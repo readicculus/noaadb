@@ -4,7 +4,8 @@ import luigi
 from luigi.contrib import sqla
 import pandas as pd
 
-from ingest.tasks import CreateTableTask, AggregateCHESSImagesTask
+from core import ForcibleTask, SQLAlchemyCustomTarget
+from ingest.tasks import CreateTableTask, IngestCHESSImagesTask
 from ingest.util import file_key
 
 
@@ -13,19 +14,21 @@ from noaadb.schema.models import *
 from noaadb.schema.utils.queries import add_species_if_not_exist, add_worker_if_not_exists, add_job_if_not_exists
 
 
-class CleanCHESSDetectionsTask(luigi.Task):
+class CleanCHESSDetectionsTask(ForcibleTask):
     output_root = luigi.Parameter()
     detection_csv = luigi.Parameter()
 
     def requires(self):
-        yield AggregateCHESSImagesTask()
-        yield CreateTableTask(
-            children=["Job", "Worker", "Species", "BoundingBox", "Annotation"])
+        yield IngestCHESSImagesTask()
 
     def output(self):
         fn = 'clean_%s' % os.path.basename(str(self.detection_csv))
         fp_csv = os.path.join(str(self.output_root), fn)
         return luigi.LocalTarget(fp_csv)
+
+    def cleanup(self):
+        if self.output().exists():
+            self.output().remove()
 
     def run(self):
         fog_converter = lambda x: False if x == 'No' or pd.isna(x) else True
@@ -85,19 +88,19 @@ class CleanCHESSDetectionsTask(luigi.Task):
             new_df.to_csv(f, index=False)
 
 
-class LoadCHESSDetectionsTask(luigi.Task):
+class IngestCHESSDetectionsTask(ForcibleTask):
     detection_csv = luigi.Parameter()
     survey = luigi.Parameter()
 
     def requires(self):
-        yield AggregateCHESSImagesTask()
+        yield IngestCHESSImagesTask()
         yield CreateTableTask(
             children=["Job", "Worker", "Species", "BoundingBox", "Annotation"])
         yield CleanCHESSDetectionsTask(detection_csv=self.detection_csv)
 
     # make flag in db that this detection file was loaded
     def output(self):
-        return sqla.SQLAlchemyTarget(DATABASE_URI, 'LoadKotzDetectionsTask', os.path.basename(str(self.detection_csv)),
+        return SQLAlchemyCustomTarget(DATABASE_URI, 'LoadKotzDetectionsTask', os.path.basename(str(self.detection_csv)),
                                      echo=False)
 
     def cleanup(self):
@@ -129,9 +132,9 @@ class LoadCHESSDetectionsTask(luigi.Task):
             .filter(EOImage.camera_id.in_(cam_ids)).all()
         assert (len(annotations) == 0)
         s.close()
+        self.output().remove()
 
     def run(self):
-        self.cleanup()
         cleaned_csv = self.input()[2]
         with cleaned_csv.open('r') as f:
             df = pd.read_csv(f)
@@ -160,18 +163,21 @@ class LoadCHESSDetectionsTask(luigi.Task):
                                  confidence=row.species_confidence,
                                  worker=worker,
                                  job=job)
-            ir_box = BoundingBox(x1=row.x1_ir,
-                                 x2=row.x2_ir,
-                                 y1=row.y1_ir,
-                                 y2=row.y2_ir,
-                                 confidence=row.species_confidence,
-                                 worker=worker,
-                                 job=job)
+
+            ir_box = None
+            if -1 not in [row.x1_ir, row.x2_ir, row.y1_ir, row.y2_ir]:
+                ir_box = BoundingBox(x1=row.x1_ir,
+                                     x2=row.x2_ir,
+                                     y1=row.y1_ir,
+                                     y2=row.y2_ir,
+                                     confidence=row.species_confidence,
+                                     worker=worker,
+                                     job=job)
+                s.add(ir_box)
             s.add(eo_box)
-            s.add(ir_box)
             s.flush()
             annot = Annotation(eo_event_key=row.event_key_eo,
-                               ir_event_key=row.event_key_ir,
+                               ir_event_key=row.event_key_ir if ir_box is not None else None,
                                ir_box=ir_box,
                                eo_box=eo_box,
                                species=species_obj,

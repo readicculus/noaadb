@@ -25,7 +25,9 @@ def file_key(fn):
 
 KOTZ_MAPPINGS = {'CENT': 'C', 'LEFT': 'L', 'RIGHT': 'R', 'RGHT': 'R'}
 def flight_cam_id_from_dir(path):
-    parts = [x for x in path.split('/') if x]
+    # parse cam and flight id
+    parts = str(path).split('/')
+    while '' in parts: parts.remove('')
     flight_id, cam_id = parts[-2], KOTZ_MAPPINGS[parts[-1]]
     return flight_id, cam_id
 

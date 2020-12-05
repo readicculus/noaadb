@@ -4,12 +4,13 @@ import math
 import os
 import luigi
 
-from ingest.tasks import LoadCHESSDetectionsTask, IngestKotzDetectionsTask, logging
+from core import ForcibleTask
+from ingest.tasks import IngestCHESSDetectionsTask, IngestKotzDetectionsTask, logging
 from noaadb import Session
 from noaadb.schema.models import *
 
 
-class SpeciesCountsTask(luigi.Task):
+class SpeciesCountsTask(ForcibleTask):
     output_root = luigi.Parameter()
 
     def output(self):
@@ -17,7 +18,7 @@ class SpeciesCountsTask(luigi.Task):
 
     def requires(self):
         yield IngestKotzDetectionsTask()
-        yield LoadCHESSDetectionsTask()
+        yield IngestCHESSDetectionsTask()
 
     def run(self):
         s = Session()
@@ -35,7 +36,7 @@ class SpeciesCountsTask(luigi.Task):
         with self.output().open('w') as f:
             f.write(json.dumps(species_counts_by_image))
 
-class PartitionAnnotationsTask(luigi.Task):
+class PartitionAnnotationsTask(ForcibleTask):
     output_root = luigi.Parameter()
     num_partitions = luigi.IntParameter()
 
@@ -50,7 +51,7 @@ class PartitionAnnotationsTask(luigi.Task):
 
 
     def requires(self):
-        return SpeciesCountsTask()
+        return SpeciesCountsTask()##output_root=os.path.join(self.output_root,'SpeciesCountsTask')
 
     def cleanup(self):
         for target in self.output().values():
@@ -155,3 +156,67 @@ class PartitionAnnotationsTask(luigi.Task):
 
         with output['distribution'].open('w') as f:
                 f.write(json.dumps(bucket_metrics, indent=4, sort_keys=True))
+
+
+class MakeTestTrainValidTask(ForcibleTask):
+    output_root = luigi.Parameter()
+    train_partitions = luigi.ListParameter()
+    test_partitions = luigi.ListParameter()
+    valid_partitions = luigi.ListParameter()
+
+    def requires(self):
+        # partition_annotations_root = os.path.join(self.output_root,'PartitionAnnotationsTask')
+        return PartitionAnnotationsTask()
+
+    def output(self):
+        out = {
+            'test_images': luigi.LocalTarget(os.path.join(str(self.output_root), 'test.json')),
+            'train_images': luigi.LocalTarget(os.path.join(str(self.output_root), 'train.json')),
+            'valid_images': luigi.LocalTarget(os.path.join(str(self.output_root), 'valid.json'))
+        }
+        return out
+
+    def cleanup(self):
+        for target in self.output().values():
+            if target.exists():
+                target.remove()
+
+    def run(self):
+        keys = list(self.input().keys())
+        num_partitions = 0
+        partitions = {}
+
+        for k in keys:
+            if isinstance(k, int):
+                num_partitions+=1
+                with self.input()[k].open('r') as f:
+                    partitions[k] = json.loads(f.read())
+
+        all_idxs = self.train_partitions + self.test_partitions + self.valid_partitions
+        if len(self.train_partitions + self.test_partitions + self.valid_partitions) != num_partitions:
+            raise Exception('len(self.train_partitions + self.test_partitions + self.valid_partitions) != num_partitions')
+        if any(all_idxs.count(x) > 1 for x in all_idxs):
+            raise Exception('Duplicate idxs in %s' % all_idxs)
+
+        test_images = []
+        for idx in self.test_partitions:
+            test_images += partitions[idx]
+
+        train_images = []
+        for idx in self.train_partitions:
+            train_images += partitions[idx]
+
+        valid_images = []
+        for idx in self.valid_partitions:
+            valid_images += partitions[idx]
+
+        output = self.output()
+        with output['test_images'].open('w') as f:
+            f.write(json.dumps(test_images))
+
+        with output['train_images'].open('w') as f:
+            f.write(json.dumps(train_images))
+
+
+        with output['valid_images'].open('w') as f:
+            f.write(json.dumps(valid_images))

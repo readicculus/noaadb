@@ -1,6 +1,6 @@
 import luigi
 
-from process.tasks import PartitionAnnotationsTask
+from process.tasks import MakeTestTrainValidTask
 
 if __name__ == '__main__':
-    luigi.build([PartitionAnnotationsTask()], local_scheduler=True)
+    luigi.build([MakeTestTrainValidTask()], local_scheduler=True)

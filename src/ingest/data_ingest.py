@@ -1,9 +1,8 @@
 import luigi
+from luigi.tools import deps_tree
 
-from src.ingest.tasks.ingest_chess_detections import LoadCHESSDetectionsTask
-from src.ingest.tasks.ingest_kotz_detections import IngestKotzDetectionsTask
-
-
+from ingest.tasks import IngestKotzDetectionsTask, IngestCHESSDetectionsTask
 
 if __name__ == '__main__':
-    luigi.build([IngestKotzDetectionsTask(), LoadCHESSDetectionsTask()], local_scheduler=True)
+    print(deps_tree.print_tree(IngestCHESSDetectionsTask()))
+    luigi.build([IngestKotzDetectionsTask(), IngestCHESSDetectionsTask()], local_scheduler=True)
