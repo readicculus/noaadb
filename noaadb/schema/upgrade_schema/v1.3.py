@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, DDL
 
 from noaadb import DATABASE_URI
-from noaadb.schema.models.ml_data import NUC
+from noaadb.schema.models import NUC
 
 engine = create_engine(DATABASE_URI, echo=False)
 

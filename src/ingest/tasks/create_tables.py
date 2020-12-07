@@ -9,7 +9,6 @@ from sqlalchemy import DDL
 
 from noaadb import DATABASE_URI, engine
 from noaadb.schema.models import * # DO NOT DELETE EVEN IF MARKED AS UNUSED IMPORT
-
 class NOAADBTableTarget(luigi.Target):
     Connection = collections.namedtuple("Connection", "engine pid")
 
@@ -67,7 +66,6 @@ class NOAADBTableTarget(luigi.Target):
 
 class CreateTableTask(luigi.Task):
     children = luigi.ListParameter()
-
     def requires(self):
         if len(list(self.children)) > 1:
             tables = list(reversed(self.children))

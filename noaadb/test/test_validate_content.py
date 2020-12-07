@@ -1,6 +1,6 @@
 import unittest
 from noaadb import Session
-from noaadb.api.queries import get_eo_images, get_ir_images
+from api import get_eo_images, get_ir_images
 from noaadb.schema.models import *
 from sqlalchemy import desc
 

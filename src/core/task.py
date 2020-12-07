@@ -43,16 +43,16 @@ class ForcibleTask(luigi.Task):
     """A luigi task which can be forceably rerun"""
     force = luigi.BoolParameter(significant=False, default=False)
     force_upstream = luigi.BoolParameter(significant=False, default=False)
-    block_force = luigi.BoolParameter(significant=False, default=False)
+    lock = luigi.BoolParameter(significant=False, default=False)
 
     def cleanup(self):
-        raise NotImplementedError('Must define cleanup ')
+        raise NotImplementedError('Must define cleanup %s' % self.task_id)
 
 
 
     def complete(self):
         logger = logging.getLogger('core_debug')
-        if self.force and not self.block_force:
+        if self.force and not self.lock:
             logger.debug('COMPLETE_ret_False: ' + self.task_id)
             return False
 

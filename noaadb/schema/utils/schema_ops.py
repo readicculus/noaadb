@@ -1,10 +1,9 @@
-from sqlalchemy import create_engine, DDL
+from sqlalchemy import DDL
 
-from noaadb import DATABASE_URI
-from noaadb.schema.models.label_data import LabelBase
-from noaadb.schema.models.ml_data import MLBase
+from noaadb.schema.models.archive.label_data import LabelBase
+from noaadb.schema.models import MLBase
 from noaadb.schema.models.survey_data import SurveyDataBase
-from noaadb.schema.models.utilities import UtilitiesBase
+from noaadb.schema.models.archive.utilities import UtilitiesBase
 
 
 def drop_survey_schema(engine,tables_only=True):

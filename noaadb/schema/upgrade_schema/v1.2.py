@@ -1,11 +1,10 @@
 import random
 
-from sqlalchemy import create_engine, and_
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine
 from sqlalchemy import DDL
 from noaadb import DATABASE_URI
-from noaadb.api.query_builder import qb_image_with_sightings, qb_labels
-from noaadb.schema.models.ml_data import TrainTestSplit, MLType
+from api import qb_labels
+from noaadb.schema.models import TrainTestSplit, MLType
 from noaadb import Session
 engine = create_engine(DATABASE_URI, echo=False)
 

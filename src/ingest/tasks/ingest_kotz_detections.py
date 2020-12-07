@@ -17,8 +17,6 @@ import pandas as pd
 import numpy as np
 
 from noaadb.schema.utils.queries import add_worker_if_not_exists, add_job_if_not_exists, add_species_if_not_exist
-
-
 class JoinDirectoryEOIRCSVTask(ForcibleTask):
     directory = luigi.Parameter()
     output_root = luigi.Parameter()

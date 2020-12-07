@@ -3,10 +3,12 @@ import json
 import math
 import os
 import luigi
+from sqlalchemy import tuple_
 
 from core import ForcibleTask
 from ingest.tasks import IngestCHESSDetectionsTask, IngestKotzDetectionsTask, logging
 from noaadb import Session
+from noaadb.core.exceptions import NOAADBDataIntegrityException
 from noaadb.schema.models import *
 
 
@@ -20,6 +22,10 @@ class SpeciesCountsTask(ForcibleTask):
         yield IngestKotzDetectionsTask()
         yield IngestCHESSDetectionsTask()
 
+    def cleanup(self):
+        if self.output().exists():
+            self.output().remove()
+
     def run(self):
         s = Session()
         annotations = s.query(Annotation).all()
@@ -28,13 +34,30 @@ class SpeciesCountsTask(ForcibleTask):
 
         species_counts_by_image = {}
         for annotation in annotations:
-            key = annotation.eo_event_key
+            key = "%s-%s" % (annotation.eo_event_key, annotation.ir_event_key)
             if not key in species_counts_by_image:
                 species_counts_by_image[key] = initial_dict.copy()
             species_counts_by_image[key][annotation.species.name] += 1
         s.close()
         with self.output().open('w') as f:
             f.write(json.dumps(species_counts_by_image))
+
+class CheckOneIRToEOTask(ForcibleTask):
+    def run(self):
+        s = Session()
+
+        diff_keys = s.query(Annotation.eo_event_key, Annotation.ir_event_key) \
+            .filter(Annotation.eo_event_key != Annotation.ir_event_key) \
+            .distinct(tuple_(Annotation.eo_event_key, Annotation.ir_event_key)).all()
+        ir_keys = []
+        eo_keys = []
+        for eo_k, ir_k in diff_keys:
+            eo_keys.append(eo_k)
+            ir_keys.append(ir_k)
+        duplicates = set([x for x in ir_keys if ir_keys.count(x) > 1])
+        if len(duplicates) > 0:
+            raise NOAADBDataIntegrityException('IR Keys associated with more than one eo image exist.')
+        s.close()
 
 class PartitionAnnotationsTask(ForcibleTask):
     output_root = luigi.Parameter()
@@ -89,8 +112,6 @@ class PartitionAnnotationsTask(ForcibleTask):
 
     def run(self):
         logger = logging.getLogger('luigi-interface')
-
-        self.cleanup()
 
         with self.input().open('r') as f:
             species_counts_by_image = json.loads(f.read())
@@ -166,7 +187,8 @@ class MakeTestTrainValidTask(ForcibleTask):
 
     def requires(self):
         # partition_annotations_root = os.path.join(self.output_root,'PartitionAnnotationsTask')
-        return PartitionAnnotationsTask()
+        yield CheckOneIRToEOTask()
+        yield PartitionAnnotationsTask()
 
     def output(self):
         out = {

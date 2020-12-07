@@ -76,8 +76,8 @@ class Annotation(DetectionBase):
 
     id = Column(Integer, autoincrement=True, primary_key=True)
 
-    eo_event_key = Column(FILENAME, ForeignKey(EOImage.event_key, ondelete='CASCADE'), nullable=False)
-    ir_event_key = Column(FILENAME, ForeignKey(IRImage.event_key, ondelete='CASCADE'), nullable=False)
+    eo_event_key = Column(FILENAME, ForeignKey(EOImage.event_key, ondelete='CASCADE'))
+    ir_event_key = Column(FILENAME, ForeignKey(IRImage.event_key, ondelete='CASCADE'))
     # eo_image = relationship("EOImage", primaryjoin="foreign(Annotation.event_key)==EOImage.event_key")
     # ir_image = relationship("EOImage", primaryjoin="foreign(Annotation.event_key)==IRImage.event_key")
     # ir_image = relationship('IRImage', back_populates='labels',
@@ -98,4 +98,7 @@ class Annotation(DetectionBase):
     eo_box_id = Column(Integer, ForeignKey(BoundingBox.id, ondelete='CASCADE'))
     eo_box = relationship(BoundingBox,foreign_keys=[eo_box_id], cascade="all,delete")
 
+class TrainTesValid(DetectionBase):
+    __tablename__ = 'annotation'
+    __table_args__ = {'schema': schema_name}
 

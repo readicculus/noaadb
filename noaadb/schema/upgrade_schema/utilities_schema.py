@@ -1,7 +1,6 @@
 from noaadb import Session
 from noaadb.schema.models import Camera
-from noaadb.schema.models.utilities import ImagePaths
-from noaadb.schema.utils.schema_ops import *
+from noaadb.schema.models.archive.utilities import ImagePaths
 
 source_engine = create_engine(DATABASE_URI)
 # drop_utilities_schema()
