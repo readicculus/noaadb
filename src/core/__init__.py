@@ -4,7 +4,7 @@ import time
 import luigi
 from dotenv import find_dotenv, load_dotenv
 
-from core.task import ForcibleTask
+from core.task import ForcibleTask, AlwaysRunTask
 from core.target import SQLAlchemyCustomTarget
 import os
 current_dir = os.path.dirname(__file__)
@@ -30,4 +30,4 @@ fh = logging.FileHandler(log_fp, mode='w')
 fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
 
-__all__ = ["ForcibleTask", "SQLAlchemyCustomTarget"]
+__all__ = ["ForcibleTask", "SQLAlchemyCustomTarget", "AlwaysRunTask"]

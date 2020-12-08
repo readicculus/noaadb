@@ -92,3 +92,21 @@ class ForcibleTask(luigi.Task):
         # to return it's true value at the end of the Task
         cls.run = toggle_force_to_false(cls.run)
         # cls.trigger_event = toggle_force_to_false(cls.trigger_event)
+
+
+
+def toggle_complete_to_true(func):
+    def wrapper(self, *args, **kwargs):
+        self.is_complete = True
+        return func(self, *args, **kwargs)
+    return wrapper
+
+class AlwaysRunTask(luigi.Task):
+    is_complete = False
+
+    def complete(self):
+        return self.is_complete
+
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+        cls.run = toggle_complete_to_true(cls.run)
