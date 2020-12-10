@@ -13,9 +13,12 @@ def toggle_force_to_false(func):
     the end of the task's lifecycle, when we need to know the true value
     of Target.exists()"""
     def wrapper(self, *args, **kwargs):
+        if self.lock and self.complete():
+            raise Exception("Hit run() on a locked task.?!")
         logger = logging.getLogger('core_debug')
         logger.debug('CLEANUP: ' + self.task_id)
-        self.cleanup()
+        if not self.lock:
+            self.cleanup()
         self.force = False
         logger.debug('RUN: ' + self.task_id)
         return func(self, *args, **kwargs)
@@ -35,8 +38,8 @@ def toggle_force_to_false(func):
 #                 out.exists = lambda *args, **kwargs: out.__class__.exists(out, *args, **kwargs)
 #         return outputs
 #     return wrapper
-
-
+#
+#
 
 
 class ForcibleTask(luigi.Task):

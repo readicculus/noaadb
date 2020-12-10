@@ -1,8 +1,9 @@
 import enum
+import math
 from typing import TypeVar
 
 from sqlalchemy import Column, Date, VARCHAR, BOOLEAN, ForeignKey, \
-    MetaData, Integer, Float
+    MetaData, Integer, Float, Enum, case
 from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.ext.declarative import declarative_base, declared_attr, ConcreteBase
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -10,7 +11,7 @@ from sqlalchemy.orm import validates, relationship
 from sqlalchemy.schema import CheckConstraint, Sequence
 
 from noaadb.schema import JOBWORKERNAME, FILENAME, FILEPATH
-from noaadb.schema.models import Base, EOImage, IRImage
+from noaadb.schema.models import Base, EOImage, IRImage, UniqueConstraint
 
 schema_name = 'annotation_data'
 # label_meta = MetaData(schema=schema_name)
@@ -65,6 +66,44 @@ class BoundingBox(DetectionBase):
     job_id = Column(JOBWORKERNAME, ForeignKey(Job.name), nullable=False)
     job = relationship(Job)
 
+    @hybrid_property
+    def is_point(self): return self.x1==self.x2 and self.y1 == self.y2
+
+    @is_point.expression
+    def is_point(cls): return cls.x1==cls.x2 and cls.y1 == cls.y2
+
+    @hybrid_property
+    def cx(self): return int(self.x1+(self.x2-self.x1)/2)
+
+    @cx.expression
+    def cx(cls): return int(cls.x1+(cls.x2-cls.x1)/2)
+
+    @hybrid_property
+    def cy(self): return int(self.y1+(self.y2-self.y1)/2)
+
+    @cy.expression
+    def cy(cls): return int(cls.y1+(cls.y2-cls.y1)/2)
+
+    def to_dict(self):
+        return {'id': self.id,
+                'x1': self.x1,
+                'x2': self.x2,
+                'y1': self.y1,
+                'y2': self.y2,
+                'confidence': self.confidence}
+
+    @classmethod
+    def from_dict(cls, d):
+        cls(x1 = d['x1'],
+            x2 = d['x2'],
+            y1 = d['y1'],
+            y2 = d['y2'],
+            confidence = d['confidence'],
+            id = d.get('id'),
+            worker_id = d.get('worker_id'),
+            job_id = d.get('job_id'))
+        return cls
+
     __table_args__ = (
         CheckConstraint('x1<=x2 AND y1<=y2',
                         name='bbox_valid'), {'schema': schema_name,},
@@ -98,7 +137,63 @@ class Annotation(DetectionBase):
     eo_box_id = Column(Integer, ForeignKey(BoundingBox.id, ondelete='CASCADE'))
     eo_box = relationship(BoundingBox,foreign_keys=[eo_box_id], cascade="all,delete")
 
-class TrainTesValid(DetectionBase):
-    __tablename__ = 'annotation'
-    __table_args__ = {'schema': schema_name}
+import enum
+class TrainTestValidEnum(enum.Enum):
+    train = 1
+    test = 2
+    valid = 3
 
+class TrainTestValid(DetectionBase):
+    __tablename__ = 'train_test_valid'
+    id = Column(Integer, autoincrement=True, primary_key=True)
+
+    eo_event_key = Column(FILENAME, ForeignKey(EOImage.event_key, ondelete='CASCADE'), nullable=True)
+    ir_event_key = Column(FILENAME, ForeignKey(IRImage.event_key, ondelete='CASCADE'), nullable=True)
+
+    type = Column('type', Enum(TrainTestValidEnum))
+    __table_args__ = (
+        CheckConstraint('NOT(eo_event_key IS NULL AND ir_event_key IS NULL)'),
+        UniqueConstraint(eo_event_key, ir_event_key, type),
+        {'schema': schema_name},
+    )
+#
+# class BoundingBoxStaging(DetectionBase):
+#     __tablename__ = 'bounding_box_staging'
+#     id = Column(Integer, autoincrement=True, primary_key=True)
+#     x1 = Column(Integer)
+#     x2 = Column(Integer)
+#     y1 = Column(Integer)
+#     y2 = Column(Integer)
+#     confidence = Column(VARCHAR(32))
+#
+#     target_id = Column(Integer, ForeignKey(IRImage.event_key), nullable=False)
+#     target_box = relationship(BoundingBox)
+#
+#     remove_target = Column(BOOLEAN, default=False)
+#     date_registered = Column(Date)
+#
+#     @property
+#     def cx(self): return int(self.x1+(self.x2-self.x1)/2)
+#
+#     @property
+#     def cy(self): return int(self.y1+(self.y2-self.y1)/2)
+#
+#     @property
+#     def area(self): return int(self.y1+(self.y2-self.y1)/2)
+#
+#     @property
+#     def distance_from_target(self):
+#         target_cx = self.target_box.cx
+#         target_cy = self.target_box.cy
+#         dist = math.hypot(target_cx - self.cx, target_cy - self.cy)
+#
+#         return dist
+#
+#
+#     __table_args__ = (
+#         CheckConstraint('x1<=x2 AND y1<=y2',
+#                         name='bbox_valid'), {'schema': schema_name,},
+#         )
+#
+#
+#

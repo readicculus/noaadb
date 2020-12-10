@@ -6,12 +6,11 @@ import logging
 ###
 # Ingest Kotz Images
 ###
-from luigi.mock import MockTarget
 
 from core import SQLAlchemyCustomTarget, ForcibleTask
-from ingest.tasks import CreateTableTask
-from ingest.util import get_image_size
-from ingest.util import file_key, MetaParser, safe_int_cast, parse_kotz_filename, safe_float_cast, \
+from pipelines.ingest.tasks import CreateTableTask
+from pipelines.ingest.util.image_size import get_image_size
+from pipelines.ingest.util.image_utilities import  file_key, MetaParser, safe_int_cast, parse_kotz_filename, safe_float_cast, \
     flight_cam_id_from_dir
 from noaadb import Session, DATABASE_URI
 from noaadb.schema.models import *

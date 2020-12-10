@@ -1,16 +1,17 @@
 import copy
 import json
+import logging
 import math
 import os
 import luigi
-from sqlalchemy import tuple_
+from sqlalchemy import tuple_, or_
 
-from core import ForcibleTask
-from ingest.tasks import IngestCHESSDetectionsTask, IngestKotzDetectionsTask, logging
-from noaadb import Session
-from noaadb.core.exceptions import NOAADBDataIntegrityException
+from core import ForcibleTask, SQLAlchemyCustomTarget, AlwaysRunTask
+from pipelines.ingest.tasks import IngestAllTask,CreateTableTask
+from noaadb import Session, DATABASE_URI, engine
 from noaadb.schema.models import *
-
+from collections import defaultdict
+import pandas as pd
 
 class SpeciesCountsTask(ForcibleTask):
     output_root = luigi.Parameter()
@@ -19,8 +20,7 @@ class SpeciesCountsTask(ForcibleTask):
         return luigi.LocalTarget(os.path.join(str(self.output_root), 'species_counts.json'))
 
     def requires(self):
-        yield IngestKotzDetectionsTask()
-        yield IngestCHESSDetectionsTask()
+        yield IngestAllTask()
 
     def cleanup(self):
         if self.output().exists():
@@ -34,7 +34,7 @@ class SpeciesCountsTask(ForcibleTask):
 
         species_counts_by_image = {}
         for annotation in annotations:
-            key = "%s-%s" % (annotation.eo_event_key, annotation.ir_event_key)
+            key = "%s" % annotation.eo_event_key
             if not key in species_counts_by_image:
                 species_counts_by_image[key] = initial_dict.copy()
             species_counts_by_image[key][annotation.species.name] += 1
@@ -42,22 +42,6 @@ class SpeciesCountsTask(ForcibleTask):
         with self.output().open('w') as f:
             f.write(json.dumps(species_counts_by_image))
 
-class CheckOneIRToEOTask(ForcibleTask):
-    def run(self):
-        s = Session()
-
-        diff_keys = s.query(Annotation.eo_event_key, Annotation.ir_event_key) \
-            .filter(Annotation.eo_event_key != Annotation.ir_event_key) \
-            .distinct(tuple_(Annotation.eo_event_key, Annotation.ir_event_key)).all()
-        ir_keys = []
-        eo_keys = []
-        for eo_k, ir_k in diff_keys:
-            eo_keys.append(eo_k)
-            ir_keys.append(ir_k)
-        duplicates = set([x for x in ir_keys if ir_keys.count(x) > 1])
-        if len(duplicates) > 0:
-            raise NOAADBDataIntegrityException('IR Keys associated with more than one eo image exist.')
-        s.close()
 
 class PartitionAnnotationsTask(ForcibleTask):
     output_root = luigi.Parameter()
@@ -179,7 +163,7 @@ class PartitionAnnotationsTask(ForcibleTask):
                 f.write(json.dumps(bucket_metrics, indent=4, sort_keys=True))
 
 
-class MakeTestTrainValidTask(ForcibleTask):
+class MakeTrainTestValidTask(ForcibleTask):
     output_root = luigi.Parameter()
     train_partitions = luigi.ListParameter()
     test_partitions = luigi.ListParameter()
@@ -187,8 +171,7 @@ class MakeTestTrainValidTask(ForcibleTask):
 
     def requires(self):
         # partition_annotations_root = os.path.join(self.output_root,'PartitionAnnotationsTask')
-        yield CheckOneIRToEOTask()
-        yield PartitionAnnotationsTask()
+        return PartitionAnnotationsTask()
 
     def output(self):
         out = {
@@ -242,3 +225,128 @@ class MakeTestTrainValidTask(ForcibleTask):
 
         with output['valid_images'].open('w') as f:
             f.write(json.dumps(valid_images))
+
+
+# class CheckOneIRToEOTask(AlwaysRunTask):
+#     def run(self):
+#         s = Session()
+#
+#         eo_ir_pairs = s.query(Annotation.eo_event_key, Annotation.ir_event_key) \
+#             .filter(Annotation.eo_event_key != Annotation.ir_event_key) \
+#             .distinct(tuple_(Annotation.eo_event_key, Annotation.ir_event_key)).all()
+#         ir_keys = []
+#         eo_keys = []
+#         for eo_k, ir_k in eo_ir_pairs:
+#             eo_keys.append(eo_k)
+#             ir_keys.append(ir_k)
+#
+#
+#         duplicate_eo = set([x for x in eo_keys if eo_keys.count(x) > 1])
+#         duplicate_ir = set([x for x in ir_keys if ir_keys.count(x) > 1])
+#         s.close()
+#
+#         if len(duplicate_eo) > 0 or len(duplicate_ir) > 0:
+#             raise NOAADBDataIntegrityException('IR Keys associated with more than one eo image exist.')
+
+class TrainTestValidStatsTask(AlwaysRunTask):
+    def get_species_total_count_in_db(self, s, species_name):
+        return s.query(Annotation).join(Species).filter(Species.name == species_name).count()
+
+    def get_counts(self, s, type):
+        eo_ir_pairs = s.query(TrainTestValid.eo_event_key, TrainTestValid.ir_event_key) \
+            .filter(TrainTestValid.type == type).all()
+
+        ir_keys = []
+        eo_keys = []
+        for eo_k, ir_k in eo_ir_pairs:
+            eo_keys.append(eo_k)
+            ir_keys.append(ir_k)
+
+        annotations = s.query(Annotation) \
+            .filter(or_(Annotation.eo_event_key.in_(eo_keys), Annotation.ir_event_key.in_(ir_keys))).all()
+
+        species = s.query(Species).all()
+
+        counts = {x.name: 0 for x in species}
+        for annotation in annotations:
+            counts[annotation.species.name] += 1
+
+        return counts
+
+    def run(self):
+        s = Session()
+        train_counts = self.get_counts(s, TrainTestValidEnum.train)
+        test_counts = self.get_counts(s, TrainTestValidEnum.test)
+        valid_counts = self.get_counts(s, TrainTestValidEnum.valid)
+
+        total = defaultdict(int)
+        for elm in [train_counts, test_counts, valid_counts]:
+            for k, v in elm.items():
+                total[k] += v
+
+        total_in_db = defaultdict(int)
+        for k,v in total.items():
+            total_in_db[k] = self.get_species_total_count_in_db(s, k)
+
+        output = pd.DataFrame({'train': train_counts,
+                               'test': test_counts,
+                               'valid': valid_counts,
+                               'total': total,
+                               'total_in_db': total_in_db})
+        s.close()
+        output.to_sql(name='train_test_valid_stats',
+                      schema='annotation_data',
+                      index_label='Species',
+                      con=engine,
+                      if_exists='replace')
+
+
+class LoadTrainTestValidTask(ForcibleTask):
+
+    def requires(self):
+        yield MakeTrainTestValidTask()
+        yield CreateTableTask(children=["TrainTestValid"])
+        # yield CheckOneIRToEOTask()
+
+
+    def output(self):
+        return SQLAlchemyCustomTarget(DATABASE_URI, 'LoadTrainTestValidTask', 'LoadTrainTestValidTask',
+                                     echo=False)
+
+    def cleanup(self):
+        self.output().remove()
+        s = Session()
+        s.query(TrainTestValid).delete()
+        s.commit()
+        s.close()
+
+    def load_image_list(self, target, type):
+        with target.open('r') as f:
+            images = json.loads(f.read())
+
+        s = Session()
+        eo_ir_pairs = s.query(Annotation.eo_event_key, Annotation.ir_event_key) \
+            .filter(Annotation.eo_event_key.in_(images)) \
+            .distinct(tuple_(Annotation.eo_event_key, Annotation.ir_event_key)).all()
+
+        for eo_k, ir_k in eo_ir_pairs:
+            ttv_obj = TrainTestValid(eo_event_key=eo_k, ir_event_key=ir_k, type=type)
+            s.add(ttv_obj)
+        s.commit()
+        s.close()
+
+
+    def run(self):
+        image_lists_target = self.input()[0]
+        train = image_lists_target['train_images']
+        test = image_lists_target['test_images']
+        valid = image_lists_target['valid_images']
+
+        self.load_image_list(train, 'train')
+        self.load_image_list(test, 'test')
+        self.load_image_list(valid, 'valid')
+        yield TrainTestValidStatsTask()
+        self.output().touch()
+
+
+

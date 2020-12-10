@@ -224,6 +224,8 @@ class IRImage(SurveyDataBase):
                }
         return res
 
+
+
 # class FusedImage(SurveyDataBase):
 #     __tablename__ = 'fused_image'
 #     file_name = Column(FILENAME, primary_key=True)

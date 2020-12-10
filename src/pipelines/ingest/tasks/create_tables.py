@@ -7,6 +7,7 @@ import sqlalchemy
 from luigi.contrib.sqla import SQLAlchemyTarget
 from sqlalchemy import DDL
 
+from core import ForcibleTask
 from noaadb import DATABASE_URI, engine
 from noaadb.schema.models import * # DO NOT DELETE EVEN IF MARKED AS UNUSED IMPORT
 class NOAADBTableTarget(luigi.Target):
@@ -66,10 +67,13 @@ class NOAADBTableTarget(luigi.Target):
 
 class CreateTableTask(luigi.Task):
     children = luigi.ListParameter()
+    lock = luigi.BoolParameter(default=True)
+    force = luigi.BoolParameter(default=False)
+
     def requires(self):
         if len(list(self.children)) > 1:
             tables = list(reversed(self.children))
-            return CreateTableTask(children=list(reversed(tables[1:])))
+            return CreateTableTask(children=list(reversed(tables[1:])), lock=self.lock, force=self.force)
         return None
 
     def output(self):
@@ -77,7 +81,9 @@ class CreateTableTask(luigi.Task):
         self.table_name = tables.pop(0)
         t = globals()[self.table_name]
         return NOAADBTableTarget(DATABASE_URI, t)
-
+    #
+    # def cleanup(self):
+    #     self.output().remove()
 
     def run(self):
         self.output().touch()

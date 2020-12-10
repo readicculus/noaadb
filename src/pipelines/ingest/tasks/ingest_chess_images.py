@@ -5,9 +5,9 @@ import os
 import luigi
 
 from core import ForcibleTask, SQLAlchemyCustomTarget
-from ingest.tasks import CreateTableTask
-from ingest.util import get_image_size
-from ingest.util import file_key, parse_chess_fn
+from pipelines.ingest.tasks import CreateTableTask
+from pipelines.ingest.util.image_size import get_image_size
+from pipelines.ingest.util.image_utilities import file_key, parse_chess_fn
 from noaadb import Session, DATABASE_URI
 from noaadb.schema.models import *
 from noaadb.schema.utils.queries import add_or_get_cam_flight_survey

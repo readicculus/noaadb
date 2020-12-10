@@ -1,12 +1,11 @@
 import os
 
 import luigi
-from luigi.contrib import sqla
 import pandas as pd
 
 from core import ForcibleTask, SQLAlchemyCustomTarget
-from ingest.tasks import CreateTableTask, IngestCHESSImagesTask
-from ingest.util import file_key
+from pipelines.ingest.tasks import CreateTableTask, IngestCHESSImagesTask
+from pipelines.ingest.util.image_utilities import file_key
 
 
 from noaadb import DATABASE_URI, Session
