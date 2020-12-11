@@ -2,16 +2,13 @@ import logging
 
 import luigi
 
-
 from luigi.task import flatten
 
 
-
-
 def toggle_force_to_false(func):
-    """Toggle self.force permanently to be False. This is required towards
-    the end of the task's lifecycle, when we need to know the true value
-    of Target.exists()"""
+    # Wrap the run task so that when run is normally called
+    # we call this task instead which
+    # first calls cleanup() before calling run()
     def wrapper(self, *args, **kwargs):
         if self.lock and self.complete():
             raise Exception("Hit run() on a locked task.?!")
@@ -22,24 +19,8 @@ def toggle_force_to_false(func):
         self.force = False
         logger.debug('RUN: ' + self.task_id)
         return func(self, *args, **kwargs)
-    return wrapper
 
-#
-# def toggle_exists(output_func):
-#     """Patch Target.exists() if self.force is True"""
-#     def wrapper(self):
-#         outputs = output_func(self)
-#         for out in luigi.task.flatten(outputs):
-#             # Patch Target.exists() to return False
-#             if self.force:
-#                 out.exists = lambda *args, **kwargs: False
-#             # "Unpatch" Target.exists() to it's original form
-#             else:
-#                 out.exists = lambda *args, **kwargs: out.__class__.exists(out, *args, **kwargs)
-#         return outputs
-#     return wrapper
-#
-#
+    return wrapper
 
 
 class ForcibleTask(luigi.Task):
@@ -49,10 +30,11 @@ class ForcibleTask(luigi.Task):
     lock = luigi.BoolParameter(significant=False, default=False)
 
     def cleanup(self):
+        # ForcibleTask's must define a cleanup function
         raise NotImplementedError('Must define cleanup %s' % self.task_id)
 
-
-
+    # override the complete function to return False when we have forced the task to run
+    # if we have not forced the task to run return as normal
     def complete(self):
         logger = logging.getLogger('core_debug')
         if self.force and not self.lock:
@@ -63,11 +45,13 @@ class ForcibleTask(luigi.Task):
         if len(outputs) == 0:
             return False
 
+        # return as normal
         logger.debug('COMPLETE_ret_normal: ' + self.task_id)
         return all(map(lambda output: output.exists(), outputs))
 
-
-    def get_tree(self):
+    # walk through tree of upstream dependencies and return
+    # this is called if a task has force_upstream to true
+    def get_upstream_tasks(self):
         done = False
         tasks = [self]
         checked = []
@@ -78,31 +62,30 @@ class ForcibleTask(luigi.Task):
                 done = True
         return checked
 
-    def __init__(self,  *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Force children to be rerun
         if self.force_upstream:
+            # Force upstream children to be rerun
             self.force = True
-            children = list(reversed(self.get_tree()))
+            children = list(reversed(self.get_upstream_tasks()))
             for child in children:
-                child.force = True
+                # don't force locked tasks
+                if not child.lock:
+                    child.force = True
 
     def __init_subclass__(cls):
         super().__init_subclass__()
-        # cls.output = toggle_exists(cls.output)
-        # Later on in the task's lifecycle, 'run' and 'trigger_event' are called so we can use
-        # these as an opportunity to toggle "force = False" to allow the Target.exists()
-        # to return it's true value at the end of the Task
+        # override task run with our wrapper run function that also cleans up
         cls.run = toggle_force_to_false(cls.run)
-        # cls.trigger_event = toggle_force_to_false(cls.trigger_event)
-
 
 
 def toggle_complete_to_true(func):
     def wrapper(self, *args, **kwargs):
         self.is_complete = True
         return func(self, *args, **kwargs)
+
     return wrapper
+
 
 class AlwaysRunTask(luigi.Task):
     is_complete = False
