@@ -4,17 +4,16 @@ import math
 import os
 from typing import List
 
-import luigi
-from sqlalchemy import func
-
-from core import ForcibleTask
-from noaadb import Session
-from noaadb.schema.models import IRImage, Annotation, BoundingBox
-
 import cv2
+import luigi
 import numpy as np
 
-from pipelines.pt2box.tasks import DrawBoundingBoxesTask, StatsPt2BoxTask
+from core import ForcibleTask, AlwaysRunTask
+from noaadb import Session
+from noaadb.schema.models import IRImage, Annotation, BoundingBox
+from pipelines.refine_ir import pipelineConfig
+from pipelines.refine_ir.tasks import GenerateKotzListTask, \
+    GeneratePoint2BoxListTask
 
 
 class LabelPointToBoxTransform(object):
@@ -35,14 +34,13 @@ class LabelPointToBoxTransform(object):
 
 
 
-class Pt2BoxTask(ForcibleTask):
+class ProcessIRImageTask(ForcibleTask):
     ir_image_key = luigi.Parameter()
     output_root = luigi.Parameter()
 
     delta_crop = luigi.IntParameter(default=10)
     percentile = luigi.IntParameter(default=90)
     intersected_point_delta = luigi.IntParameter(default=4)
-    draw_result = luigi.BoolParameter(default=False)
 
     def requires(self):
         pass
@@ -111,39 +109,35 @@ class Pt2BoxTask(ForcibleTask):
                 max_area = area
         return max_contour, max_area
 
+    def _seperate_duplicate_boxes(self, boxes):
+        duplicate_idxs = []
+        for i, b in enumerate(boxes):
+            for j, b2 in enumerate(boxes):
+                if j == i:
+                    continue
+                if b.x1 == b2.x1 and b.x2 == b2.x2 and b.y1 == b2.y1 and b.y2 == b2.y2:
+                    duplicate_idxs.append(i)
+
+        duplicate_boxes = [boxes[i] for i in duplicate_idxs]
+        unique_boxes = [boxes[i] for i in range(len(boxes)) if i not in duplicate_idxs]
+        assert(len(boxes) == len(unique_boxes)+len(duplicate_boxes))
+        return unique_boxes, duplicate_boxes
+
     def run(self):
         ir_image, boxes = self._load_annotations()
         im = self._read_ir_norm(os.path.join(ir_image.directory, ir_image.filename))
 
-        output_dict = {}
+        unique_boxes, duplicate_boxes = self._seperate_duplicate_boxes(boxes)
+
+        output_dict = {'duplicates': {}, 'unique': {}}
 
         im_w, im_h = im.shape[1], im.shape[0]
-        good_boxes = []
-        duplicate_boxes = []
-        for b in boxes:
-            found = False
-            for b2 in good_boxes:
-                if b.x1 == b2.x1 and b.x2 == b2.x2 and b.y1 == b2.y1 and b.y2 == b2.y2:
-                    found = True
-                    break
-            if found:
-                duplicate_boxes.append(b)
-            else:
-                good_boxes.append(b)
-        output_dict['duplicates'] = {}
-
-        to_add = []
-        for b in duplicate_boxes:
-            for b2 in good_boxes:
-                if b.x1 == b2.x1 and b.x2 == b2.x2 and b.y1 == b2.y1 and b.y2 == b2.y2:
-                    to_add.append(b2)
-        duplicate_boxes += to_add
 
         for b in duplicate_boxes:
             output_dict['duplicates'][b.id] = b.to_dict()
-        boxes = good_boxes
+        boxes = unique_boxes
         for current_box in boxes:
-            output_dict[current_box.id] = {'db_box': current_box.to_dict()}
+            output_dict['unique'][current_box.id] = {'pre': current_box.to_dict()}
             crop = self._get_crop(current_box, im_w, im_h, self.delta_crop)
             crop_x1, crop_y1, crop_x2, crop_y2 = crop
 
@@ -188,70 +182,85 @@ class Pt2BoxTask(ForcibleTask):
                 y1_new = y
                 x2_new = x + w
                 y2_new = y + h
-
-                output_dict[current_box.id]['new_box'] = {'x1': x1_new, 'y1': y1_new, 'x2': x2_new, 'y2': y2_new,
+                old_box = output_dict['unique'][current_box.id]['pre']
+                # if w*h < old_box['area']:
+                #     output_dict[current_box.id]['new_box'] = None
+                #     continue
+                # else:
+                output_dict['unique'][current_box.id]['post'] = {'x1': x1_new, 'y1': y1_new, 'x2': x2_new, 'y2': y2_new,
                                                           'area': w * h}
-                new_box = output_dict[current_box.id]['new_box']
-                old_box = output_dict[current_box.id]['db_box']
+                new_box = output_dict['unique'][current_box.id]['post']
                 new_x_cent = int(new_box['x1'] + (new_box['x2'] - new_box['x1']) / 2)
                 new_y_cent = int(new_box['y1'] + (new_box['y2'] - new_box['y1']) / 2)
                 old_x_cent = int(old_box['x1'] + (old_box['x2'] - old_box['x1']) / 2)
                 old_y_cent = int(old_box['y1'] + (old_box['y2'] - old_box['y1']) / 2)
 
                 dist = math.hypot(old_x_cent - new_x_cent, old_y_cent - new_y_cent)
-                output_dict[current_box.id]['stats'] = {'distance': dist}
+                area_change = new_box['area']/old_box['area']
+                area_change_pixels = new_box['area']-old_box['area']
+                output_dict['unique'][current_box.id]['stats'] = {'distance': dist, 'area_change': area_change, 'area_change_pixels': area_change_pixels}
             else:
-                output_dict[current_box.id]['new_box'] = None
+                output_dict['unique'][current_box.id]['post'] = None
+                output_dict['unique'][current_box.id]['stats'] = None
 
         with self.output().open('w') as f:
             f.write(json.dumps(output_dict, indent=4))
 
-        # Call draw if set parameter
-        if self.draw_result:
-            yield DrawBoundingBoxesTask(input_file=self.output().path)
-
-class AllPt2BoxTask(luigi.WrapperTask):
-    output_root = luigi.Parameter()
+class CreateRefinementDataTask(AlwaysRunTask):
+    output_dir = luigi.Parameter('refinements')
     delta_crop = luigi.IntParameter(default=10)
     percentile = luigi.IntParameter(default=90)
-
     intersected_point_delta = luigi.IntParameter(default=4)
-    max_images = luigi.IntParameter(default=-1)
-    draw_only = luigi.BoolParameter(default=False)
+    tasks_to_run = []
+
 
     def requires(self):
-        s = Session()
+        conf = pipelineConfig()
+        if conf.task_type == 'RefineKotz':
+            return GenerateKotzListTask()
+        elif conf.task_type == 'CHESSPt2Box':
+            return GeneratePoint2BoxListTask()
+        else:
+            return None
 
-        counts = s.query(Annotation.ir_event_key, func.count(Annotation.ir_event_key))\
-            .join(Annotation.ir_box)\
-            .filter(BoundingBox.is_point)\
-            .group_by(Annotation.ir_event_key).all()
-
-
-        counts = sorted(counts, key=lambda x: x[1], reverse=True)
-        s.close()
-        if self.max_images > 0:
-            counts = counts[:max(self.max_images, len(counts))]
-
-
-        for k, count in counts:
-            draw_result = count > 4
-            if self.draw_only and not draw_result:
-                continue
-            yield Pt2BoxTask(ir_image_key=k, output_root=self.output().path,
-                             delta_crop=self.delta_crop,
-                             percentile=self.percentile,
-                             intersected_point_delta=self.intersected_point_delta,
-                             draw_result=draw_result)
+    def cleanup(self):
+        pass
 
     def output(self):
-        dir = '%d_%d_%d' % (self.delta_crop, self.percentile, self.intersected_point_delta)
-        json_root = os.path.join(self.output_root, dir)
-        # return the output directory where the json files are
-        return luigi.local_target.LocalTarget(json_root)
+        conf = pipelineConfig()
+        json_root_dir = os.path.join(str(conf.output_root), 'refinements_list.txt')
+        return luigi.LocalTarget(json_root_dir)
 
-    def complete(self):
-        return False
+
+    def json_root_target(self):
+        json_dir = '%d_%d_%d' % (self.delta_crop, self.percentile, self.intersected_point_delta)
+
+        conf = pipelineConfig()
+        json_root_dir = os.path.join(str(conf.output_root),str(self.output_dir), json_dir)
+        # return the output directory where the json files are
+        return luigi.local_target.LocalTarget(json_root_dir)
 
     def run(self):
-        yield StatsPt2BoxTask(input_root=self.output().path)
+        json_root = self.json_root_target()
+        images_and_counts = []
+        with self.input().open('r') as f:
+            for line in f.readlines():
+                l = line.strip()
+                im_key, count = l.split(' ')
+                images_and_counts.append((im_key, int(count)))
+
+        tasks = []
+        for k, count in images_and_counts:
+            x = ProcessIRImageTask(
+                ir_image_key=k,
+                output_root=json_root.path,
+                delta_crop=self.delta_crop,
+                percentile=self.percentile,
+                intersected_point_delta=self.intersected_point_delta)
+            tasks.append(x)
+        yield tasks
+        with self.output().open('w') as f:
+            for task in tasks:
+                f.write("%s\n"%task.output().path)
+
+

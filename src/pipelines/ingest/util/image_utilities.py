@@ -77,6 +77,19 @@ def parse_kotz_filename(fn):
     timestamp = datetime.fromtimestamp(ts)
     return flight, cam, timestamp
 
+def parse_beaufort_filename(fn):
+    name_parts = fn.split('_')
+    start_idx = 3
+    # fl01 images have slightly  different names
+    if name_parts[2] != '2019':
+        start_idx = 2
+    flight = name_parts[start_idx]
+    cam, day, time = name_parts[start_idx + 1], name_parts[start_idx + 2], name_parts[start_idx + 3]
+    time, ms = time.split('.')
+    day_hr_ms = day + '_' + time
+    ts = datetime.strptime(day_hr_ms, "%Y%m%d_%H%M%S").timestamp() + float('.' + ms)
+    timestamp = datetime.fromtimestamp(ts)
+    return flight, cam, timestamp
 
 # MetaFile Parser
 class MetaParser:

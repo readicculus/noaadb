@@ -39,7 +39,7 @@ class Survey(SurveyDataBase):
 class Flight(SurveyDataBase):
     __tablename__ = 'flight'
     id = Column(Integer, autoincrement=True, primary_key=True)
-    flight_name = Column(String(50), unique=True)
+    flight_name = Column(String(50))
 
     survey_id = Column(Integer, ForeignKey(Survey.id))
     survey = relationship(Survey)
@@ -180,7 +180,8 @@ class EOImage(SurveyDataBase):
                'h': self.height,
                'c': self.depth,
                'filename': self.filename,
-               # 'filepath': self.file_path
+               'directory': self.directory,
+               'event_key': self.event_key
                }
         return res
 
@@ -220,7 +221,8 @@ class IRImage(SurveyDataBase):
                'h': self.height,
                'c': self.depth,
                'filename': self.filename,
-               #'filepath': self.file_path
+               'directory': self.directory,
+               'event_key': self.event_key
                }
         return res
 

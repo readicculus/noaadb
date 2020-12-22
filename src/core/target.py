@@ -15,4 +15,3 @@ class SQLAlchemyCustomTarget(SQLAlchemyTarget):
                 conn.execute(ins)
 
         assert not self.exists()
-

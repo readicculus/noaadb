@@ -84,12 +84,37 @@ class BoundingBox(DetectionBase):
     @cy.expression
     def cy(cls): return int(cls.y1+(cls.y2-cls.y1)/2)
 
+    @hybrid_property
+    def width(self): return self.x2 - self.x1
+
+    @width.expression
+    def width(cls): return cls.x2 - cls.x1
+
+    @hybrid_property
+    def height(self): return self.y2 - self.y1
+
+    @height.expression
+    def height(cls): return cls.y2 - cls.y1
+
+    @hybrid_property
+    def area(self): return (self.y2 - self.y1) * (self.x2 - self.x1)
+
+    @area.expression
+    def area(cls): return (cls.y2 - cls.y1) * (cls.x2 - cls.x1)
+
+    def pad(self, padding):
+        self.x1 -= padding
+        self.x2 += padding
+        self.y1 -= padding
+        self.y2 += padding
+
     def to_dict(self):
         return {'id': self.id,
                 'x1': self.x1,
                 'x2': self.x2,
                 'y1': self.y1,
                 'y2': self.y2,
+                'area': self.area,
                 'confidence': self.confidence}
 
     @classmethod
@@ -136,6 +161,18 @@ class Annotation(DetectionBase):
     ir_box = relationship(BoundingBox,foreign_keys=[ir_box_id], cascade="all,delete")
     eo_box_id = Column(Integer, ForeignKey(BoundingBox.id, ondelete='CASCADE'))
     eo_box = relationship(BoundingBox,foreign_keys=[eo_box_id], cascade="all,delete")
+
+    def to_dict(self):
+        ir_box_d = None if self.ir_box_id is None else self.ir_box.to_dict()
+        eo_box_d = None if self.eo_box_id is None else self.eo_box.to_dict()
+        d = {'species': self.species.name,
+             'hotspot_id': self.hotspot_id,
+             'age_class': self.age_class,
+             'eo_event_key': self.eo_event_key,
+             'ir_event_key': self.ir_event_key,
+             'eo_box': eo_box_d,
+             'ir_box': ir_box_d}
+        return d
 
 import enum
 class TrainTestValidEnum(enum.Enum):

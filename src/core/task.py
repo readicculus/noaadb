@@ -69,9 +69,7 @@ class ForcibleTask(luigi.Task):
             self.force = True
             children = list(reversed(self.get_upstream_tasks()))
             for child in children:
-                # don't force locked tasks
-                if not child.lock:
-                    child.force = True
+                child.force = True
 
     def __init_subclass__(cls):
         super().__init_subclass__()
