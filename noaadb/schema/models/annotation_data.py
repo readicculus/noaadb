@@ -1,17 +1,18 @@
 import enum
 import math
+from operator import or_
 from typing import TypeVar
 
 from sqlalchemy import Column, Date, VARCHAR, BOOLEAN, ForeignKey, \
-    MetaData, Integer, Float, Enum, case
+    MetaData, Integer, Float, Enum, case, select, exists, func
 from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.ext.declarative import declarative_base, declared_attr, ConcreteBase
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import validates, relationship
+from sqlalchemy.orm import validates, relationship, column_property, object_session
 from sqlalchemy.schema import CheckConstraint, Sequence
 
 from noaadb.schema import JOBWORKERNAME, FILENAME, FILEPATH
-from noaadb.schema.models import Base, EOImage, IRImage, UniqueConstraint
+from noaadb.schema.models import Base, EOImage, IRImage, UniqueConstraint, IRWithErrors, IRWithoutErrors, IRVerifiedBackground
 
 schema_name = 'annotation_data'
 # label_meta = MetaData(schema=schema_name)
@@ -174,6 +175,20 @@ class Annotation(DetectionBase):
              'ir_box': ir_box_d}
         return d
 
+# class Partitions(DetectionBase):
+#     __tablename__ = 'partitions'
+#     id = Column(Integer, autoincrement=True, primary_key=True)
+#     eo_event_key = Column(FILENAME, ForeignKey(EOImage.event_key, ondelete='CASCADE'), nullable=True)
+#     ir_event_key = Column(FILENAME, ForeignKey(IRImage.event_key, ondelete='CASCADE'), nullable=True)
+#
+#     partition = Column('partition', Integer, nullable=False)
+#
+#     __table_args__ = (
+#         CheckConstraint('NOT(eo_event_key IS NULL AND ir_event_key IS NULL)'),
+#         UniqueConstraint(eo_event_key, ir_event_key, type),
+#         {'schema': schema_name},
+#     )
+
 import enum
 class TrainTestValidEnum(enum.Enum):
     train = 1
@@ -193,6 +208,36 @@ class TrainTestValid(DetectionBase):
         UniqueConstraint(eo_event_key, ir_event_key, type),
         {'schema': schema_name},
     )
+
+class Partitions(DetectionBase):
+    __tablename__ = 'image_partitions'
+    id = Column(Integer, autoincrement=True, primary_key=True)
+
+    eo_event_key = Column(FILENAME, ForeignKey(EOImage.event_key, ondelete='CASCADE'), nullable=True)
+    ir_event_key = Column(FILENAME, ForeignKey(IRImage.event_key, ondelete='CASCADE'), nullable=True)
+
+    partition = Column('partition', Integer)
+
+    # @hybrid_property
+    # def good(self):
+    #     return object_session(self).query(exists().where(or_(IRWithoutErrors.ir_event_key==self.ir_event_key,
+    #                                                          IRVerifiedBackground.ir_event_key==self.ir_event_key))).scalar()
+    #
+    # @good.expression
+    # def good(cls):
+    #     return (exists().where(or_(IRWithoutErrors.ir_event_key==cls.ir_event_key,
+    #                                                          IRVerifiedBackground.ir_event_key==cls.ir_event_key)))
+
+    # bad = column_property(select([exists().where(ir_event_key == IRWithErrors.ir_event_key)]))
+    # good = column_property(exists().where(IRWithoutErrors.ir_event_key==ir_event_key))
+
+    # is_background = Column('is_background', BOOLEAN) # TODO hybrid?
+    __table_args__ = (
+        CheckConstraint('NOT(eo_event_key IS NULL AND ir_event_key IS NULL)'),
+        UniqueConstraint(eo_event_key, ir_event_key, partition),
+        {'schema': schema_name},
+    )
+
 #
 # class BoundingBoxStaging(DetectionBase):
 #     __tablename__ = 'bounding_box_staging'

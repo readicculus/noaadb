@@ -1,9 +1,11 @@
 import enum
+import os
 from typing import TypeVar
 
+import cv2
 import numpy as np
 from sqlalchemy import Column, VARCHAR, DateTime, BOOLEAN, ForeignKey, \
-    MetaData, Integer, UniqueConstraint, Float, String, BigInteger
+    MetaData, Integer, UniqueConstraint, Float, String, BigInteger, select
 from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.ext.declarative import declarative_base
@@ -185,6 +187,10 @@ class EOImage(SurveyDataBase):
                }
         return res
 
+    def ocv_load(self):
+        return cv2.imread(os.path.join(self.directory, self.filename))
+
+
 class IRImage(SurveyDataBase):
     __tablename__ = 'ir_image'
     __table_args__ = {'schema': schema_name}
@@ -213,9 +219,7 @@ class IRImage(SurveyDataBase):
     def camera_name(self): return self.camera.cam_name
     @hybrid_property
     def flight(self): return self.camera.flight.flight_name
-    # @hybrid_property
-    # def survey(self):
-    #     return self.camera.flight.survey.name
+    
     def to_dict(self):
         res = {'w': self.width,
                'h': self.height,
@@ -227,6 +231,15 @@ class IRImage(SurveyDataBase):
         return res
 
 
+    def ocv_load(self):
+        return cv2.imread(os.path.join(self.directory, self.filename), cv2.IMREAD_UNCHANGED)
+
+    def ocv_load_normed(self):
+        im = self.ocv_load()
+        im_norm = ((im - np.min(im)) / (0.0 + np.max(im) - np.min(im)))
+        im_norm = im_norm * 255.0
+        im_norm = im_norm.astype(np.uint8)
+        return im_norm
 
 # class FusedImage(SurveyDataBase):
 #     __tablename__ = 'fused_image'

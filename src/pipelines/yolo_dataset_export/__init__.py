@@ -2,6 +2,8 @@ import os
 import luigi
 from dotenv import load_dotenv, find_dotenv
 
+from noaadb.schema.models import TrainTestValidEnum
+
 pipeline_dir = os.path.dirname(__file__)
 parent_dir = os.path.dirname(pipeline_dir)
 
@@ -9,14 +11,44 @@ luigi_env = os.path.join(parent_dir, 'luigi.env')
 
 load_dotenv(find_dotenv(filename=luigi_env))
 
-class datasetConfig(luigi.Config):
-    max_objects_per_image = luigi.IntParameter(default=-1)
-    combine_test_valid = luigi.BoolParameter(default=False)
+
+# Ability to configure Train, Test, and Valid sets indavidually
+class setConfig(luigi.Config):
+    # max_objects_per_image = luigi.IntParameter(default=-1)
+    only_manual_reviewed = luigi.BoolParameter(default=False)
+    background_ratio = luigi.FloatParameter(default=0)  # 0 = no background, 1 = same # background as positive
+
+
+class testSetConfig(setConfig): pass
+
+
+class trainSetConfig(setConfig): pass
+
+
+class validSetConfig(setConfig): pass
+
+
+class datasetConfig(object):
+    def __init__(self):
+        self.test_cfg = testSetConfig()
+        self.train_cfg = trainSetConfig()
+        self.valid_cfg = validSetConfig()
+
+    def get_cfg(self, set_type: TrainTestValidEnum):
+        if set_type == TrainTestValidEnum.train:
+            return self.train_cfg
+        elif set_type == TrainTestValidEnum.test:
+            return self.test_cfg
+        elif set_type == TrainTestValidEnum.valid:
+            return self.valid_cfg
+        raise Exception('Invalid set type: %s' % str(set_type))
+
 
 class processingConfig(luigi.Config):
     fix_image_dimension = luigi.DictParameter(default=None)
     bbox_padding = luigi.IntParameter(default=0)
     species_map = luigi.DictParameter(default={})
+
 
 class chipConfig(luigi.Config):
     chip_dim = luigi.IntParameter()  # chip dimension

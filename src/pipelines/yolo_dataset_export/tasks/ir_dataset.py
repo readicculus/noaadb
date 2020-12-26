@@ -10,8 +10,9 @@ import numpy as np
 
 from core import ForcibleTask
 from noaadb import Session
-from noaadb.schema.models import Annotation, TrainTestValid, TrainTestValidEnum, IRImage, Species
-from pipelines.yolo_dataset_export import processingConfig
+from noaadb.schema.models import Annotation, TrainTestValid, TrainTestValidEnum, IRImage, Species, IRWithoutErrors, \
+    IRVerifiedBackground
+from pipelines.yolo_dataset_export import processingConfig, datasetConfig
 
 
 class ExportYoloIRDatasetTask(ForcibleTask):
@@ -101,7 +102,8 @@ class ExportYoloIRDatasetTask(ForcibleTask):
         with output[list_name].open('r') as f:
             for line in f.readlines():
                 images.append(line.strip())
-
+        if num_to_draw > len(images) or num_to_draw == -1:
+            num_to_draw = len(images)
         selected = random.sample(images, num_to_draw)
         for image_fp in selected:
             out_path = os.path.join(out_dir, os.path.basename(image_fp))
@@ -110,11 +112,17 @@ class ExportYoloIRDatasetTask(ForcibleTask):
 
 
     def _query_annotations_by_type(self, s, type):
-        annotations = s.query(Annotation)\
+        q = s.query(Annotation)\
                 .join(TrainTestValid, Annotation.ir_event_key==TrainTestValid.ir_event_key)\
                 .filter(TrainTestValid.ir_event_key != None)\
-                .filter(Annotation.ir_box_id != None)\
-                .filter(TrainTestValid.type == type).all()
+                .filter(Annotation.ir_box_id != None).filter(TrainTestValid.type == type)
+
+        dataset_config = datasetConfig()
+        cfg = dataset_config.get_cfg(type)
+        if cfg.only_manual_reviewed:
+            q = q.join(IRWithoutErrors, IRWithoutErrors.ir_event_key == Annotation.ir_event_key)
+
+        annotations = q.all()
 
         group_by_image = {}
         for annotation in annotations:
@@ -124,10 +132,28 @@ class ExportYoloIRDatasetTask(ForcibleTask):
         return group_by_image
 
     def _query_images_by_type(self, s, type):
-        images = s.query(IRImage)\
+        q = s.query(IRImage)\
                 .join(TrainTestValid, IRImage.event_key==TrainTestValid.ir_event_key)\
+                .join(Annotation, IRImage.event_key==Annotation.ir_event_key)\
                 .filter(TrainTestValid.ir_event_key != None)\
-                .filter(TrainTestValid.type == type).all()
+                .filter(TrainTestValid.type == type)
+
+        dataset_config = datasetConfig()
+        cfg = dataset_config.get_cfg(type)
+        if cfg.only_manual_reviewed:
+            q = q.join(IRWithoutErrors, IRWithoutErrors.ir_event_key == IRImage.event_key)
+
+        images = q.distinct(IRImage.event_key).all()
+
+        # query background_images
+        if cfg.background_ratio > 0:
+            max_bg = int(cfg.background_ratio * len(images))
+            background = s.query(IRImage) \
+                .join(TrainTestValid, IRImage.event_key == TrainTestValid.ir_event_key) \
+                .join(IRVerifiedBackground, IRImage.event_key == IRVerifiedBackground.ir_event_key) \
+                .filter(TrainTestValid.ir_event_key != None) \
+                .filter(TrainTestValid.type == type).limit(max_bg).all()
+            images = images + background
 
         image_by_key = {}
         for image in images:
@@ -177,8 +203,9 @@ class ExportYoloIRDatasetTask(ForcibleTask):
         out_ext = '.txt'
         os.makedirs(target_dir.path, exist_ok=True)
 
-        for im_key, image_labels in labels.items():
+        for im_key in images:
             image = images[im_key]
+            image_labels = [] if im_key not in labels else labels[im_key]
             target_fn = '.'.join(image.filename.split('.')[:-1]) + out_ext
             label_target_fp = os.path.join(target_dir.path, target_fn)
 

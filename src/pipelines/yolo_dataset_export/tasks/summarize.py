@@ -1,10 +1,12 @@
 import json
 import os
+from random import random
 
 import luigi
 
+from pipelines.ingest.util.image_utilities import file_key
 from pipelines.yolo_dataset_export import pipeline_dir
-from pipelines.yolo_dataset_export.tasks import ExportYoloEODatasetTask
+from pipelines.yolo_dataset_export.tasks import ExportYoloEODatasetTask, ExportYoloIRDatasetTask
 import numpy as np
 from noaadb import Session
 from noaadb.schema.models import *
@@ -41,6 +43,7 @@ def count_labels(image_list, task):
     heights = np.array(heights)
     res = {'num_images': len(label_files), 'class_counts': class_counts}
 
+
 if __name__ == '__main__':
     # s =  Session()
     # a = s.query(Annotation, BoundingBox).join(Annotation.eo_box).filter(BoundingBox.width > 500).all()
@@ -55,9 +58,15 @@ if __name__ == '__main__':
     #     s.flush()
     # s.commit()
     # s.close()
-    luigi_project_config = os.path.join(pipeline_dir, 'export_eo_dataset.cfg')
+    good_ims = []
+    with open('/fast/generated_data/IR/manual_review_valid/good_list.txt', 'r') as f:
+        for l in f.readlines():
+            good_ims.append(file_key(l.strip()))
+
+    luigi_project_config = os.path.join(pipeline_dir, 'export_ir_dataset.cfg')
     luigi.configuration.add_config_path(luigi_project_config)
-    task = ExportYoloEODatasetTask()
+    task = ExportYoloIRDatasetTask()
+    task.generate_examples('valid_list', 500)
     output = task.output()
     train_label_counts = count_labels(output['train_list'], task)
 
