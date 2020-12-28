@@ -5,6 +5,7 @@ import cv2
 import luigi
 
 from core import ForcibleTask
+from noaadb.schema.models import TrainTestValidEnum
 from pipelines.yolo_dataset_export import chipConfig
 
 def tile_2d_stride(m_w, m_h, c_w, c_h, stride_x, stride_y):
@@ -107,6 +108,7 @@ class CalculateImageChips(ForcibleTask):
 
 class GenerateImageChips(ForcibleTask):
     output_dir = luigi.Parameter() # out dir will be train/test/valid dirs
+    set_type = luigi.EnumParameter(enum=TrainTestValidEnum)
     input_image_details = luigi.DictParameter()  # database image dict
     input_image_labels = luigi.ListParameter()
     artifacts_root = luigi.Parameter()

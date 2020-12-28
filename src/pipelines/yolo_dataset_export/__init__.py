@@ -17,14 +17,11 @@ class setConfig(luigi.Config):
     # max_objects_per_image = luigi.IntParameter(default=-1)
     only_manual_reviewed = luigi.BoolParameter(default=False)
     background_ratio = luigi.FloatParameter(default=0)  # 0 = no background, 1 = same # background as positive
+    bbox_padding = luigi.IntParameter(default=0)
 
 
 class testSetConfig(setConfig): pass
-
-
 class trainSetConfig(setConfig): pass
-
-
 class validSetConfig(setConfig): pass
 
 
@@ -46,7 +43,6 @@ class datasetConfig(object):
 
 class processingConfig(luigi.Config):
     fix_image_dimension = luigi.DictParameter(default=None)
-    bbox_padding = luigi.IntParameter(default=0)
     species_map = luigi.DictParameter(default={})
 
 
