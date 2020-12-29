@@ -5,11 +5,58 @@ import shutil
 import cv2
 import luigi
 import os
+import pandas as pd
 
 from core import ForcibleTask
 from noaadb.schema.models import TrainTestValidEnum
 from pipelines.yolo_dataset_export import datasetConfig, processingConfig
+from pipelines.yolo_dataset_export.tasks.plots import draw_label_plots
 
+# ========= Helper functions =========
+def read_image_list(target):
+    lines = []
+    with target.open('r') as f:
+        for l in f.readlines():
+            lines.append(l.strip())
+    return lines
+
+
+def get_label_files(image_list_target):
+    images = read_image_list(image_list_target)
+    label_files = []
+    for im in images:
+        lbl_fp = '.'.join(im.split('.')[:-1]) + '.txt'
+        label_files.append(lbl_fp)
+    return label_files
+
+def load_labels(image_list_target, flatten=False):
+    label_files = get_label_files(image_list_target)
+    labels = {}
+    if flatten: labels = []
+    for fp in label_files:
+        if not flatten: labels[fp] = []
+        with open(fp, 'r') as f:
+            for line in f.readlines():
+                class_id, cx, cy, w, h = line.strip().split(" ")
+                class_id, cx, cy, w, h = int(class_id), float(cx), float(cy), float(w), float(h)
+                if flatten:
+                    labels.append({'class_id': class_id, 'x': cx, 'y': cy, 'w': w, 'h': h})
+                else:
+                    labels[fp].append({'class_id': class_id, 'x': cx, 'y': cy, 'w': w, 'h': h})
+    return labels
+
+
+
+# ========= Base Task =========
+def post_run_wrapper(func):
+    # Wrap the run task so we can generate dataset stats and validate dataset after they are created
+    def wrapper(self, *args, **kwargs):
+        ret = func(self, *args, **kwargs)
+        self.generate_stats()
+        self.validate_dataset()
+        return ret
+
+    return wrapper
 
 class DarknetDatasetTask(ForcibleTask):
     dataset_root = luigi.Parameter()
@@ -23,17 +70,76 @@ class DarknetDatasetTask(ForcibleTask):
         super().__init__(*args, **kwargs)
         self.dataset_cfg = datasetConfig()
         self.processing_cfg = processingConfig()
+        os.makedirs(self.output()['train_dir'].path, exist_ok=True)
+        os.makedirs(self.output()['test_dir'].path, exist_ok=True)
+        os.makedirs(self.output()['valid_dir'].path, exist_ok=True)
+        os.makedirs(self.output()['examples_dir'].path, exist_ok=True)
+        os.makedirs(self.output()['backup_dir'].path, exist_ok=True)
+        os.makedirs(self.output()['stats_dir'].path, exist_ok=True)
+
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+        # override task run with our wrapper run function that also cleans up
+        cls.run = post_run_wrapper(cls.run)
+
+
+    def generate_stats(self):
         output = self.output()
-        self.output_targets = {'Train': {'type': TrainTestValidEnum.train,
-                                         'dir': output['train_dir'],
-                                         'image_list': output['train_list']},
-                               'Test': {'type': TrainTestValidEnum.test,
-                                        'dir': output['test_dir'],
-                                        'image_list': output['test_list']},
-                               'Valid': {'type': TrainTestValidEnum.valid,
-                                         'dir': output['valid_dir'],
-                                         'image_list': output['valid_list']},
-                               }
+        train_labels = load_labels(output['train_list'], flatten=True)
+        # test_labels = load_labels(output['train_list'], flatten=True)
+        # valid_labels = load_labels(output['train_list'], flatten=True)
+        stats_dir = output['stats_dir'].path
+        x = pd.DataFrame(train_labels)
+        draw_label_plots(x, stats_dir)
+
+    def validate_dataset(self):
+        # validate no labels outside of image
+        train_labels = load_labels(self.output()['train_list'], flatten=True)
+        test_labels = load_labels(self.output()['train_list'], flatten=True)
+        valid_labels = load_labels(self.output()['train_list'], flatten=True)
+        all = train_labels+test_labels+valid_labels
+        df = pd.DataFrame(all)
+        x1 = df['x'] - (df['w'] / 2.)
+        x2 = df['x'] + (df['w'] / 2.)
+        y1 = df['y'] - (df['h'] / 2.)
+        y2 = df['y'] + (df['h'] / 2.)
+        PAD = 0.0001
+        assert (x1 >= -PAD).all()
+        assert (x2 <= 1+PAD).all()
+        assert (x1 <= x2).all()
+        assert (y1 >= -PAD).all()
+        assert (y2 <= 1+PAD).all()
+        assert (y1 <= y2).all()
+
+    def get_output_by_enum(self, train_test_valid_enum):
+        output = self.output()
+        output_targets_by_enum = {
+            TrainTestValidEnum.train: {'dir': output['train_dir'],
+                                       'image_list': output['train_list']},
+            TrainTestValidEnum.test: {'dir': output['test_dir'],
+                                      'image_list': output['test_list']},
+            TrainTestValidEnum.valid: {'dir': output['valid_dir'],
+                                       'image_list': output['valid_list']},
+        }
+        return output_targets_by_enum[train_test_valid_enum]
+
+    def get_outputs_by_name(self):
+        output = self.output()
+        return {'Train': {'type': TrainTestValidEnum.train,
+                                        'dir': output['train_dir'],
+                                        'image_list': output['train_list']},
+                              'Test': {'type': TrainTestValidEnum.test,
+                                       'dir': output['test_dir'],
+                                       'image_list': output['test_list']},
+                              'Valid': {'type': TrainTestValidEnum.valid,
+                                        'dir': output['valid_dir'],
+                                        'image_list': output['valid_list']},
+                              }
+
+    # def __init_subclass__(cls):
+    #     super().__init_subclass__()
+    #     cls.dataset_cfg = datasetConfig()
+    #     cls.processing_cfg = processingConfig()
 
     def output(self):
         dataset_dir = os.path.join(str(self.dataset_root), str(self.dataset_name))
@@ -47,6 +153,7 @@ class DarknetDatasetTask(ForcibleTask):
         yolo_names_file = os.path.join(dataset_dir, 'yolo.names')
         backup_dir = os.path.join(dataset_dir, 'backup')
         examples_dir = os.path.join(dataset_dir, 'examples')
+        stats_dir = os.path.join(dataset_dir, 'dataset_stats')
 
         return {'dataset_dir': luigi.LocalTarget(dataset_dir),
                 'train_dir': luigi.LocalTarget(train_dir),
@@ -58,7 +165,8 @@ class DarknetDatasetTask(ForcibleTask):
                 'yolo_data_file': luigi.LocalTarget(yolo_data_file),
                 'yolo_names_file': luigi.LocalTarget(yolo_names_file),
                 'backup_dir': luigi.LocalTarget(backup_dir),
-                'examples_dir': luigi.LocalTarget(examples_dir)}
+                'examples_dir': luigi.LocalTarget(examples_dir),
+                'stats_dir': luigi.LocalTarget(stats_dir)}
 
     def cleanup(self):
         print("This task was forced.")
@@ -142,11 +250,14 @@ class DarknetDatasetTask(ForcibleTask):
             os.remove(file)
 
     def _draw_labels(self, image_path):
-        im = cv2.imread(image_path)
+        color_im = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+        if len(color_im.shape) == 2:
+            # if ir convert to rgb
+            color_im = cv2.cvtColor(color_im, cv2.COLOR_GRAY2RGB)
+
         labels_path = '.'.join(image_path.split('.')[:-1]) + '.txt'
-        im_w = im.shape[1]
-        im_h = im.shape[0]
-        color_im = cv2.cvtColor(im, cv2.COLOR_GRAY2RGB)
+        im_w = color_im.shape[1]
+        im_h = color_im.shape[0]
         with open(labels_path, 'r') as f:
             # <object-class> <x_center> <y_center> <width> <height>
             for l in f.readlines():

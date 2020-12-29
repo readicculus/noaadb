@@ -166,11 +166,12 @@ class ExportYoloIRDatasetTask(DarknetDatasetTask):
         logger.info('BEGIN EXPORTING YOLO DATASET')
 
         s = Session()
+        output_targets = self.get_outputs_by_name()
         # Process each set(Test/train/valid) one by one
-        for set_name in self.output_targets:
-            set_type = self.output_targets[set_name]['type']
-            set_dir = self.output_targets[set_name]['dir']
-            set_images = self.output_targets[set_name]['image_list']
+        for set_name in output_targets:
+            set_type = output_targets[set_name]['type']
+            set_dir = output_targets[set_name]['dir']
+            set_images = output_targets[set_name]['image_list']
             labels =  self._query_annotations_by_type(s, set_type)
             images = self._query_images_by_type(s, set_type)
             logger.info('Exporting %s Images...' % set_name)

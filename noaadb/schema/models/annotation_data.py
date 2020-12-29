@@ -163,6 +163,13 @@ class Annotation(DetectionBase):
     eo_box_id = Column(Integer, ForeignKey(BoundingBox.id, ondelete='CASCADE'))
     eo_box = relationship(BoundingBox,foreign_keys=[eo_box_id], cascade="all,delete")
 
+    @hybrid_property
+    def species_name(self):
+        return self.species.name
+    @species_name.expression
+    def species_name(cls):
+        return cls.species.name
+
     def to_dict(self):
         ir_box_d = None if self.ir_box_id is None else self.ir_box.to_dict()
         eo_box_d = None if self.eo_box_id is None else self.eo_box.to_dict()

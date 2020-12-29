@@ -17,19 +17,24 @@ from noaadb.schema.models import Annotation, TrainTestValid, TrainTestValidEnum,
 from pipelines.yolo_dataset_export.tasks import DarknetDatasetTask
 from pipelines.yolo_dataset_export.tasks.eo import GenerateImageChips
 
-
-class ExportYoloEODatasetTask(DarknetDatasetTask):
-
+class BatchImageAnnotationInformation(luigi.Task):
+    artifacts_root = luigi.Parameter()
     species_filter = luigi.ListParameter()
+    image_annotations = None
 
-    def _query_image_annotations_by_type(self, s, type):
+    def populate_dict(self):
+        if self.image_annotations is not None:
+            return
+        logger = logging.getLogger('luigi-interface')
+        logger.info('='*50)
+        logger.info('Downloading all relevant image/annotation info')
+        s = Session()
         annotations = s.query(Annotation) \
             .join(TrainTestValid, Annotation.eo_event_key == TrainTestValid.eo_event_key) \
             .filter(TrainTestValid.eo_event_key != None) \
             .filter(Annotation.eo_box_id != None) \
             .join(BoundingBox, Annotation.eo_box_id == BoundingBox.id) \
             .filter(not_(BoundingBox.is_point)) \
-            .filter(TrainTestValid.type == type)\
             .options(joinedload(Annotation.ir_box),
                      joinedload(Annotation.eo_box),
                      joinedload(Annotation.species)).all()
@@ -40,60 +45,91 @@ class ExportYoloEODatasetTask(DarknetDatasetTask):
             if len(filter_by_species) == 0 or annotation.species.name not in filter_by_species:
                 continue
             if annotation.eo_event_key not in group_by_key:
-                group_by_key[annotation.eo_event_key]= {'annotations': []}
+                group_by_key[annotation.eo_event_key] = {'annotations': []}
             group_by_key[annotation.eo_event_key]['annotations'].append(annotation.to_dict())
 
-        images = s.query(EOImage) \
+        images = s.query(EOImage, TrainTestValid.type) \
             .join(TrainTestValid, EOImage.event_key == TrainTestValid.eo_event_key) \
-            .filter(TrainTestValid.eo_event_key != None) \
-            .filter(TrainTestValid.type == type).all()
+            .filter(TrainTestValid.eo_event_key != None).all()
 
-        for image in images:
+        for (image, set_type) in images:
             if image.event_key not in group_by_key:
-                continue
+                continue  # skips background?
             group_by_key[image.event_key]['image'] = image.to_dict()
-            group_by_key[image.event_key]['type'] = type
+            group_by_key[image.event_key]['set'] = set_type.name
+        s.close()
+        self.image_annotations = group_by_key
+        logger.info('Download Complete!')
+        logger.info('='*50)
 
-        return group_by_key
+    def output(self):
+        self.populate_dict()
+        out = {}
+        for k in self.image_annotations:
+            out[k] = luigi.LocalTarget(os.path.join(str(self.artifacts_root), '%s.json' % k))
+        return out
 
+    def run(self):
+        self.populate_dict()
+        logger = logging.getLogger('luigi-interface')
+        logger.info('=' * 50)
+        logger.info('Writing all relevant image/annotation info')
+        logger.info(str(self.artifacts_root))
+        outputs = self.output()
+        for k in self.image_annotations:
+            target = outputs[k]
+            content = self.image_annotations[k]
+            with target.open('w') as f:
+                f.write(json.dumps(content))
 
+        logger.info('Writing Complete!')
+        logger.info('=' * 50)
+
+class ExportYoloEODatasetTask(DarknetDatasetTask):
+
+    species_filter = luigi.ListParameter()
 
     def requires(self):
-        targets_to_type = {TrainTestValidEnum.train: self.output()['train_dir'],
-                          TrainTestValidEnum.test: self.output()['test_dir'],
-                          TrainTestValidEnum.valid: self.output()['valid_dir']}
+        batches_task = BatchImageAnnotationInformation()
+        luigi.build([batches_task], local_scheduler=True)
+        batch_files = batches_task.output()
+        for i, k in enumerate(list(batch_files.keys())):
+            if i > 100:
+                continue
 
-        list_to_type = {TrainTestValidEnum.train: "train_list",
-                       TrainTestValidEnum.test: "test_list",
-                       TrainTestValidEnum.valid: "valid_list"}
+            batch_target = batch_files[k]
 
-        s = Session()
-        tasks = {}
-        for set_type, target in targets_to_type.items():
-            tasks[list_to_type[set_type]] = []
-            set_items= self._query_image_annotations_by_type(s, set_type)
-            s.close()
-            for i, (im_key, value) in enumerate(set_items.items()):
-                # if i > 100:
-                #     break
-                image = value['image']
-                annotations = value['annotations']
-                t = GenerateImageChips(input_image_details = image, input_image_labels = annotations,
-                                       output_dir = targets_to_type[set_type].path, set_type=set_type)
-                tasks[list_to_type[set_type]].append(t)
-        return tasks
+            with batch_target.open('r') as f:
+                batch_data = json.loads(f.read())
+            set_type = TrainTestValidEnum[batch_data['set']]
+            out_dir = self.get_output_by_enum(set_type)['dir'].path
 
+            t = GenerateImageChips(event_key = k, batch_data_file = batch_target.path, chip_output_dir=out_dir)
+            yield t
 
-    def _save_dataset_labels(self, chips_list, annotations):
+    def cleanup(self):
+        self._delete_non_image_files(self.output()['train_dir'].path)
+        self._delete_non_image_files(self.output()['test_dir'].path)
+        self._delete_non_image_files(self.output()['valid_dir'].path)
+
+    def _save_dataset_labels(self, chips_list, annotations, set_type):
+        output = self.get_output_by_enum(set_type)
+        out_dir = output['dir'].path
+        os.makedirs(out_dir, exist_ok=True)
         chip_fp_list = []
         for chip in chips_list:
             chip_fp = chip['chip_fp']
-            chip_fp_list.append(chip_fp)
+            chip_fn = os.path.basename(chip_fp)
+
+            # chip_fp_list.append(chip_fp) #TODO
+
             chip_h = chip['h']
             chip_w = chip['w']
 
-            yolo_label_fn = '.'.join(chip_fp.split('.')[:-1]) + '.txt'
+            yolo_label_fp = os.path.join(out_dir, '.'.join(chip_fn.split('.')[:-1]) + '.txt')
 
+
+            chip_fp_list.append(chip_fp)
             chip_annotations = annotations[chip_fp]
             yolo_labels = []
             for a in chip_annotations:
@@ -114,7 +150,7 @@ class ExportYoloEODatasetTask(DarknetDatasetTask):
                 for species_id in ids:
                     yolo_labels.append((species_id, rcx, rcy, rw, rh))
 
-            label_target = luigi.LocalTarget(yolo_label_fn)
+            label_target = luigi.LocalTarget(yolo_label_fp)
             with label_target.open('w') as f:
                 for l in yolo_labels:
                     line = '%d %.10f %.10f %.10f %.10f\n' % l
@@ -154,23 +190,29 @@ class ExportYoloEODatasetTask(DarknetDatasetTask):
         logger = logging.getLogger('luigi-interface')
         logger.info('='*50)
         logger.info('BEGIN EXPORTING YOLO DATASET')
-        output = self.output()
         input = self.input()
-        for set_key in input:
-            image_set = input[set_key]
-            set_filepaths = []
-            for chipper in image_set:
-                chips_list_target = chipper['chips_list']
-                annotations_target = chipper['annotations']
-                with annotations_target.open('r') as f:
-                    annotations = json.loads(f.read())
-                with chips_list_target.open('r') as f:
-                    chips_list = json.loads(f.read())
-                chips_filepaths = self._save_dataset_labels(chips_list, annotations)
-                set_filepaths += chips_filepaths
+        image_list_by_set = {}
+        for image_batch_results in input:
+            chips_list_target = image_batch_results['chips_list']
+            annotations_target = image_batch_results['annotations']
+            batch_data_target = image_batch_results['batch_data_file']
+            with annotations_target.open('r') as f:
+                annotations = json.loads(f.read())
+            with chips_list_target.open('r') as f:
+                chips_list = json.loads(f.read())
+            with batch_data_target.open('r') as f:
+                batch_data = json.loads(f.read())
+            set_type = TrainTestValidEnum[batch_data['set']]
+            if not set_type in image_list_by_set: image_list_by_set[set_type] = []
+
+            chips_filepaths = self._save_dataset_labels(chips_list, annotations, set_type)
+            image_list_by_set[set_type] += chips_filepaths
+
+        for set_type in image_list_by_set:
+            targets = self.get_output_by_enum(set_type)
             # write to the image list
-            with output[set_key].open('w') as f:
-                for fp in set_filepaths:
+            with targets['image_list'].open('w') as f:
+                for fp in image_list_by_set[set_type]:
                     f.write('%s\n' % fp)
 
         self._save_names_file()
