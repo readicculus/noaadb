@@ -1,4 +1,5 @@
 import glob
+import logging
 import random
 import shutil
 
@@ -45,7 +46,12 @@ def load_labels(image_list_target, flatten=False):
                     labels[fp].append({'class_id': class_id, 'x': cx, 'y': cy, 'w': w, 'h': h})
     return labels
 
-
+def load_names(target):
+    names = []
+    with target.open('r') as f:
+        for l in f.readlines():
+            names.append(l.strip())
+    return names
 
 # ========= Base Task =========
 def post_run_wrapper(func):
@@ -77,6 +83,9 @@ class DarknetDatasetTask(ForcibleTask):
         os.makedirs(self.output()['backup_dir'].path, exist_ok=True)
         os.makedirs(self.output()['stats_dir'].path, exist_ok=True)
 
+        self.interface_log = logging.getLogger('luigi-interface')
+
+
     def __init_subclass__(cls):
         super().__init_subclass__()
         # override task run with our wrapper run function that also cleans up
@@ -84,15 +93,22 @@ class DarknetDatasetTask(ForcibleTask):
 
 
     def generate_stats(self):
+        self.interface_log.info('='*50)
+        self.interface_log.info("Creating dataset stats/figures")
         output = self.output()
         train_labels = load_labels(output['train_list'], flatten=True)
+        names = load_names(output['yolo_names_file'])
         # test_labels = load_labels(output['train_list'], flatten=True)
         # valid_labels = load_labels(output['train_list'], flatten=True)
         stats_dir = output['stats_dir'].path
         x = pd.DataFrame(train_labels)
-        draw_label_plots(x, stats_dir)
+        draw_label_plots(x, stats_dir, names)
+        self.interface_log.info("COMPLETE: Creating dataset stats/figures")
+        self.interface_log.info('='*50)
 
     def validate_dataset(self):
+        self.interface_log.info('='*50)
+        self.interface_log.info("Validating Datase")
         # validate no labels outside of image
         train_labels = load_labels(self.output()['train_list'], flatten=True)
         test_labels = load_labels(self.output()['train_list'], flatten=True)
@@ -110,6 +126,8 @@ class DarknetDatasetTask(ForcibleTask):
         assert (y1 >= -PAD).all()
         assert (y2 <= 1+PAD).all()
         assert (y1 <= y2).all()
+        self.interface_log.info("Validation Complete!")
+        self.interface_log.info('='*50)
 
     def get_output_by_enum(self, train_test_valid_enum):
         output = self.output()

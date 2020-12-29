@@ -18,17 +18,43 @@ def color_list():
         return tuple(int(h[1 + i:1 + i + 2], 16) for i in (0, 2, 4))
 
     return [hex2rgb(h) for h in plt.rcParams['axes.prop_cycle'].by_key()['color']]
+def show_values_on_bars(axs):
+    def _show_on_single_plot(ax):
+        for p in ax.patches:
+            _x = p.get_x() + p.get_width() / 2
+            _y = p.get_y() + p.get_height()
+            value = p.get_height()
+            if p.get_height().is_integer():
+                value = '%d' % p.get_height()
+            else:
+                value = '{:.2f}'.format(p.get_height())
+            ax.text(_x, _y, value, ha="center")
 
-def draw_label_plots(x, out_dir, fn_prefix=''):
+    if isinstance(axs, np.ndarray):
+        for idx, ax in np.ndenumerate(axs):
+            _show_on_single_plot(ax)
+    else:
+        _show_on_single_plot(axs)
+
+def draw_label_plots(x, out_dir, names, fn_prefix=''):
+    if fn_prefix != '': fn_prefix += '_'
     sns.pairplot(x[['x', 'y', 'w', 'h']], corner=True, diag_kind='auto', kind='hist', diag_kws=dict(bins=50),
                  plot_kws=dict(pmax=0.9))
-    plt.savefig(os.path.join(out_dir, '%s_labels_correlogram.jpg'%fn_prefix), dpi=200)
+    plt.savefig(os.path.join(out_dir, '%slabels_correlogram.jpg'%fn_prefix), dpi=200)
     plt.close()
     # matplotlib labels
-    nc = 1
+    nc = len(names)
     ax = plt.subplots(2, 2, figsize=(8, 8), tight_layout=True)[1].ravel()
     ax[0].hist(x['class_id'].astype(np.int).to_list(), bins=np.linspace(0, nc, nc + 1) - 0.5, rwidth=0.8)
     ax[0].set_xlabel('classes')
+    ticks = []
+    for t in ax[0].get_xticks():
+        if t.is_integer():
+            ticks.append(names[int(t)])
+        else:
+            ticks.append('')
+    ax[0].set_xticklabels(ticks)
+    show_values_on_bars(ax[0])
     sns.histplot(x, x='x', y='y', ax=ax[2], bins=50, pmax=0.9)
     sns.histplot(x, x='w', y='h', ax=ax[3], bins=50, pmax=0.9)
 
@@ -53,6 +79,6 @@ def draw_label_plots(x, out_dir, fn_prefix=''):
         for s in ['top', 'right', 'left', 'bottom']:
             ax[a].spines[s].set_visible(False)
 
-    plt.savefig(os.path.join(out_dir, '%s_labels.jpg'%fn_prefix), dpi=200)
+    plt.savefig(os.path.join(out_dir, '%slabels.jpg'%fn_prefix), dpi=200)
     matplotlib.use('Agg')
     plt.close()

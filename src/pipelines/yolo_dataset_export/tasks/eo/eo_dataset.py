@@ -94,9 +94,6 @@ class ExportYoloEODatasetTask(DarknetDatasetTask):
         luigi.build([batches_task], local_scheduler=True)
         batch_files = batches_task.output()
         for i, k in enumerate(list(batch_files.keys())):
-            if i > 100:
-                continue
-
             batch_target = batch_files[k]
 
             with batch_target.open('r') as f:
