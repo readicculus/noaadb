@@ -69,8 +69,9 @@ class GenerateImageChips(ForcibleTask):
         # if the output does not exist calculate the image chips for the given dimension
         image_data = self.batch_data['image']
         label_data = self.batch_data['annotations']
-        tiles = tile_2d_stride(image_data['w'], image_data['h'], chip_config.chip_dim,
-                               chip_config.chip_dim, chip_config.chip_stride, chip_config.chip_stride)
+        tiles = tile_2d_stride(image_data['w'], image_data['h'], chip_config.chip_w,
+                               chip_config.chip_h, chip_config.chip_stride_x,
+                               chip_config.chip_stride_y)
 
         tiles_to_labels = {}
 

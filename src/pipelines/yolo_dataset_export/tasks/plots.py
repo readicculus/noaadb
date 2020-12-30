@@ -37,11 +37,14 @@ def show_values_on_bars(axs):
         _show_on_single_plot(axs)
 
 def draw_label_plots(x, out_dir, names, fn_prefix=''):
+    ### Draw labels_correlogram
     if fn_prefix != '': fn_prefix += '_'
     sns.pairplot(x[['x', 'y', 'w', 'h']], corner=True, diag_kind='auto', kind='hist', diag_kws=dict(bins=50),
                  plot_kws=dict(pmax=0.9))
     plt.savefig(os.path.join(out_dir, '%slabels_correlogram.jpg'%fn_prefix), dpi=200)
     plt.close()
+
+    ### Draw 2x2 label chart
     # matplotlib labels
     nc = len(names)
     ax = plt.subplots(2, 2, figsize=(8, 8), tight_layout=True)[1].ravel()

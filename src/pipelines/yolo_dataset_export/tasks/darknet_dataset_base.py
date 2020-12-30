@@ -11,6 +11,7 @@ import pandas as pd
 from core import ForcibleTask
 from noaadb.schema.models import TrainTestValidEnum
 from pipelines.yolo_dataset_export import datasetConfig, processingConfig
+from pipelines.yolo_dataset_export.tasks.gen_anchors import gen_anchors
 from pipelines.yolo_dataset_export.tasks.plots import draw_label_plots
 
 # ========= Helper functions =========
@@ -91,18 +92,27 @@ class DarknetDatasetTask(ForcibleTask):
         # override task run with our wrapper run function that also cleans up
         cls.run = post_run_wrapper(cls.run)
 
+    def gen_anchors(self):
+        output = self.output()
+        l = get_label_files(output['train_list'])
+        l+= get_label_files(output['test_list'])
+        l+= get_label_files(output['valid_list'])
+        gen_anchors(l, output['stats_dir'].path)
 
     def generate_stats(self):
+        self.gen_anchors()
         self.interface_log.info('='*50)
         self.interface_log.info("Creating dataset stats/figures")
         output = self.output()
-        train_labels = load_labels(output['train_list'], flatten=True)
         names = load_names(output['yolo_names_file'])
-        # test_labels = load_labels(output['train_list'], flatten=True)
-        # valid_labels = load_labels(output['train_list'], flatten=True)
+        train_labels = load_labels(output['train_list'], flatten=True)
+        test_labels = load_labels(output['test_list'], flatten=True)
+        valid_labels = load_labels(output['valid_list'], flatten=True)
         stats_dir = output['stats_dir'].path
-        x = pd.DataFrame(train_labels)
-        draw_label_plots(x, stats_dir, names)
+
+        for labels, pre in zip([train_labels, test_labels, valid_labels], ['train', 'test', 'valid']):
+            x = pd.DataFrame(labels)
+            draw_label_plots(x, stats_dir, names, fn_prefix=pre)
         self.interface_log.info("COMPLETE: Creating dataset stats/figures")
         self.interface_log.info('='*50)
 
@@ -110,9 +120,11 @@ class DarknetDatasetTask(ForcibleTask):
         self.interface_log.info('='*50)
         self.interface_log.info("Validating Datase")
         # validate no labels outside of image
-        train_labels = load_labels(self.output()['train_list'], flatten=True)
-        test_labels = load_labels(self.output()['train_list'], flatten=True)
-        valid_labels = load_labels(self.output()['train_list'], flatten=True)
+        output = self.output()
+        names = load_names(output['yolo_names_file'])
+        train_labels = load_labels(output['train_list'], flatten=True)
+        test_labels = load_labels(output['test_list'], flatten=True)
+        valid_labels = load_labels(output['valid_list'], flatten=True)
         all = train_labels+test_labels+valid_labels
         df = pd.DataFrame(all)
         x1 = df['x'] - (df['w'] / 2.)

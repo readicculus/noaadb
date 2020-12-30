@@ -47,9 +47,11 @@ class processingConfig(luigi.Config):
 
 
 class chipConfig(luigi.Config):
-    chip_dim = luigi.IntParameter()  # chip dimension
-    chip_stride = luigi.IntParameter()  # stride of chip
+    chip_h = luigi.IntParameter()  # chip dimension
+    chip_w = luigi.IntParameter()  # chip dimension
+    chip_stride_x = luigi.IntParameter()  # stride of chip
+    chip_stride_y = luigi.IntParameter()  # stride of chip
     label_overlap_threshold = luigi.FloatParameter(default=.5)
 
     def get_dir_id(self):
-        return "%d_%d_%.2f" % (self.chip_dim, self.chip_stride, self.label_overlap_threshold)
+        return "%dx%d_%dx%d_%.2f" % (self.chip_h, self.chip_w, self.chip_stride_x, self.chip_stride_y, self.label_overlap_threshold)
