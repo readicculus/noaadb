@@ -8,10 +8,16 @@ import sklearn.metrics as metrics
 from noaadb import Session
 from noaadb.schema.models import *
 
+conf_thresh = .25
+NAMES = {0: "Ringed Seal", 1: "Bearded Seal"}
+FN_PATH = '/data2/luigi/evaluate/eo416x416_yolov3_tiny_3l'
+os.makedirs(FN_PATH, exist_ok=True)
 # darknet_image_list = '/fast/generated_data/IR/2020-12-25/valid/images.txt'
-darknet_image_list = '/fast/generated_data/IR/2020-12-25/test/images.txt'
+# darknet_image_list = '/fast/generated_data/IR/2020-12-25/test/images.txt'
+darknet_image_list = '/fast/generated_data/EO/seals_416x416_v3/test/images.txt'
 # dets_file = '/home/yuval/Documents/XNOR/darknet/results/detections/detections.json'
 dets_file = '/home/yuval/Documents/XNOR/darknet/results/detections/detections_test.json'
+# dets_file = '/home/yuval/Documents/XNOR/darknet/results/detections/detections_seals_416x416eo_test_yolov3-tiny-3l.json'
 
 # == Load Detections ==
 # loads the detections from darknet detections.json output(custom code required in darknet for this)
@@ -101,24 +107,39 @@ def merge(ground_truths, detections, thresh = .2):
 
 # === Count the TP, FP, FN, FP_dup dictionaries ==  #
 def counts(tps, fns, fps, duplicates):
-    fn_ct = 0
+    fn_ct = {}
     for k in fns:
-        fn_ct += len(fns[k])
+        for fn in fns[k]:
+            class_id = fn['class_id']
+            if not class_id in fn_ct:
+                fn_ct[class_id] = 0
+            fn_ct[class_id] += 1
 
-    fp_ct = 0
+    fp_ct = {}
     for k in fps:
-        fp_ct += len(fps[k])
+        for l in fps[k]:
+            class_id = l['class_id']
+            if not class_id in fp_ct:
+                fp_ct[class_id] = 0
+            fp_ct[class_id] += 1
 
-    fp_dup_ct = 0
+    fp_dup_ct = {}
     for k in duplicates:
-        fp_dup_ct += len(duplicates[k])
+        for l in duplicates[k]:
+            class_id = l['class_id']
+            if not class_id in fp_dup_ct:
+                fp_dup_ct[class_id] = 0
+            fp_dup_ct[class_id] += 1
 
-    tp_ct = 0
+    tp_ct = {}
     for k in tps:
         lbls = tps[k]
         for l in lbls.values():
             if l['det'] is not None:
-                tp_ct += 1
+                class_id = l['det']['class_id']
+                if not class_id in tp_ct:
+                    tp_ct[class_id] = 0
+                tp_ct[class_id] += 1
 
     return tp_ct, fn_ct, fp_ct, fp_dup_ct
 
@@ -155,8 +176,7 @@ def plot_false_negatives(fns, tps, fps):
         for _, v in tps_for_im.items():
             if v['det'] is not None:
                 draw_yolo2rect_box(v['det'], im_color, tp_color)
-
-        fp_out = os.path.join('/data2/luigi/evaluate', k)
+        fp_out = os.path.join(FN_PATH, k)
         fontScale = .5
         font = cv2.FONT_HERSHEY_SIMPLEX
         lineType = 1
@@ -167,26 +187,55 @@ def plot_false_negatives(fns, tps, fps):
     s.close()
     x=1
 
-def ROC(gts, dets, points = 100):
+def ROC(gts, dets, points = 31):
     confidences = np.linspace(0,1,points)
-    tpr = np.zeros(points)
-    fpr = np.zeros(points)
-    total_gt = None
+    tpr_by_class = {0: np.zeros(points), 1: np.zeros(points)}
+    fpr_by_class = {0: np.zeros(points), 1: np.zeros(points)}
+    fn_by_class = {0: np.zeros(points), 1: np.zeros(points)}
+
+    total_gt = {}
     for i, c in enumerate(confidences):
         tps, fns, fps, duplicates, thresh_filtered_ct = merge(gts, dets, c)
         tp_ct, fn_ct, fp_ct, fp_dup_ct = counts(tps, fns, fps, duplicates)
-        tpr[i] = tp_ct
-        fpr[i] = fp_ct + fp_dup_ct
-        if total_gt == None:
-            total_gt = fn_ct + tp_ct
-        assert(total_gt == fn_ct + tp_ct)
+        for class_id in tp_ct:
+            tpr_by_class[class_id][i] = tp_ct[class_id]
+        for class_id in fn_ct:
+            fn_by_class[class_id][i] = fn_ct[class_id]
+        for class_id in fp_ct:
+            dup = duplicates.get(class_id)
+            fpr_by_class[class_id][i] = fp_ct[class_id] + (0 if dup is None else dup)
 
-    tpr = tpr/total_gt
-    fpr = fpr/fpr.max()
-    roc_auc = metrics.auc(fpr, tpr)
+
+        # fpr[i] = fp_ct + fp_dup_ct
+        for k in tp_ct:
+            total_gt[k] = fn_ct[k] + tp_ct[k]
+            # total_gt = fn_ct + tp_ct
+        # assert(total_gt == fn_ct + tp_ct)
+    auc_by_class = {}
+
+    for k in [0, 1]:
+        tpr_by_class[k] = tpr_by_class[k]/total_gt[k]
+        fpr_by_class[k] = fpr_by_class[k]/fpr_by_class[k].max()
+        auc_by_class[k] = metrics.auc(fpr_by_class[k], tpr_by_class[k])
     import matplotlib.pyplot as plt
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
     plt.title('Receiver Operating Characteristic')
-    plt.plot(fpr, tpr, 'b', label='AUC = %0.2f' % roc_auc)
+    colors = {0:'b',1:'g'}
+    for k in auc_by_class:
+        plt.plot(fpr_by_class[k], tpr_by_class[k], colors[k],
+                 label='%s, AUC = %0.2f' % (NAMES[k], auc_by_class[k]))
+
+    plotted_confs = False
+    for k in tpr_by_class:
+        for i, xy in enumerate(zip(fpr_by_class[k], tpr_by_class[k])):  # <--
+            x, y = xy
+            if i % 4 == 0:
+                if not plotted_confs:
+                    ax.annotate('%.2f' % confidences[i], xy=(x + .02, y - .02), textcoords='data')
+                ax.plot([x], [y], '.', color=colors[k])
+        plotted_confs = True
+
     plt.legend(loc='lower right')
     plt.plot([0, 1], [0, 1], 'r--')
     plt.xlim([0, 1])
@@ -200,7 +249,6 @@ gts = load_gts(darknet_image_list)
 dets = load_detections(dets_file)
 
 ROC(gts,dets)
-conf_thresh = .1
 tps, fns, fps, duplicates, thresh_filtered_ct = merge(gts, dets, conf_thresh)
 tp_ct, fn_ct, fp_ct, fp_dup_ct = counts(tps, fns, fps, duplicates)
 
