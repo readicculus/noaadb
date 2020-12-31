@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 
 import cv2
@@ -6,7 +7,8 @@ import luigi
 
 from core import ForcibleTask
 from noaadb.schema.models import TrainTestValidEnum
-from pipelines.yolo_dataset_export import chipConfig
+from pipelines.yolo_dataset_export import chipConfig, datasetConfig, DATASET_LOG_NAME
+
 
 def tile_2d_stride(m_w, m_h, c_w, c_h, stride_x, stride_y):
         m = m_w // stride_x
@@ -43,6 +45,7 @@ class GenerateImageChips(ForcibleTask):
         super().__init__(*args, **kwargs)
         with open(str(self.batch_data_file), 'r') as f:
             self.batch_data = json.loads(f.read())
+        self.dataset_cfg = datasetConfig()
 
     def cleanup(self):
         pass
@@ -69,6 +72,10 @@ class GenerateImageChips(ForcibleTask):
         # if the output does not exist calculate the image chips for the given dimension
         image_data = self.batch_data['image']
         label_data = self.batch_data['annotations']
+        set_name = self.batch_data['set']
+        set_type = TrainTestValidEnum[set_name]
+        dataset_cfg = self.dataset_cfg.get_cfg(set_type)
+
         tiles = tile_2d_stride(image_data['w'], image_data['h'], chip_config.chip_w,
                                chip_config.chip_h, chip_config.chip_stride_x,
                                chip_config.chip_stride_y)
@@ -103,6 +110,15 @@ class GenerateImageChips(ForcibleTask):
                          'y2': y2, 'class_id': label['species']}
                     tiles_to_labels[tile_key]['labels'].append(r)
 
+        # if any chips with a species that is not 'allowed'aka (remove_chip_if_species_present) remove the chip
+        remove_chip_if_species_present = list(dataset_cfg.remove_chip_if_species_present)
+        to_remove_keys = set()
+        for tile_k in tiles_to_labels:
+            for label in tiles_to_labels[tile_k]['labels']:
+                if label['class_id'] in remove_chip_if_species_present:
+                    to_remove_keys.add(tile_k)
+        for tile_k in to_remove_keys:
+            del tiles_to_labels[tile_k]
         # see if any labels did not make it onto a tile
         unassigned_labels = []
         for label in label_data:
@@ -113,7 +129,7 @@ class GenerateImageChips(ForcibleTask):
                         found = True
                         break
             if not found:
-                unassigned_labels.append(label['eo_box']['id'])
+                unassigned_labels.append(label)
 
         return tiles_to_labels, unassigned_labels
 
@@ -122,6 +138,12 @@ class GenerateImageChips(ForcibleTask):
         #     os.makedirs(str(self.output_dir), exist_ok=True)
 
         chips, unassigned_labels = self.calculate_chips()
+        dataset_log = logging.getLogger(DATASET_LOG_NAME)
+        if len(unassigned_labels) > 0:
+            dataset_log.info('%d labels were not assigned to a chip and are therefor unrepresented in the generated dataset.' % len(unassigned_labels))
+            for l in unassigned_labels:
+                dataset_log.info(json.dumps(l))
+
         im = self._load_image()
         chip_files_saved = []
         annotations_artifact = {}

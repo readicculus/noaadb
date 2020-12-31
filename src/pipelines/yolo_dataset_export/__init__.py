@@ -1,4 +1,5 @@
 import os
+
 import luigi
 from dotenv import load_dotenv, find_dotenv
 
@@ -18,7 +19,9 @@ class setConfig(luigi.Config):
     only_manual_reviewed = luigi.BoolParameter(default=False)
     background_ratio = luigi.FloatParameter(default=0)  # 0 = no background, 1 = same # background as positive
     bbox_padding = luigi.IntParameter(default=0)
-
+    species_map = luigi.DictParameter(default={})
+    species_filter = luigi.ListParameter(default=[])
+    remove_chip_if_species_present = luigi.ListParameter(default=[])
 
 class testSetConfig(setConfig): pass
 class trainSetConfig(setConfig): pass
@@ -43,7 +46,7 @@ class datasetConfig(object):
 
 class processingConfig(luigi.Config):
     fix_image_dimension = luigi.DictParameter(default=None)
-    species_map = luigi.DictParameter(default={})
+
 
 
 class chipConfig(luigi.Config):
@@ -55,3 +58,6 @@ class chipConfig(luigi.Config):
 
     def get_dir_id(self):
         return "%dx%d_%dx%d_%.2f" % (self.chip_h, self.chip_w, self.chip_stride_x, self.chip_stride_y, self.label_overlap_threshold)
+
+
+DATASET_LOG_NAME = 'dataset-logger'

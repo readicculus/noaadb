@@ -2,6 +2,7 @@ import glob
 import logging
 import random
 import shutil
+import time
 
 import cv2
 import luigi
@@ -10,8 +11,8 @@ import pandas as pd
 
 from core import ForcibleTask
 from noaadb.schema.models import TrainTestValidEnum
-from pipelines.yolo_dataset_export import datasetConfig, processingConfig
-from pipelines.yolo_dataset_export.tasks.gen_anchors import gen_anchors
+from pipelines.yolo_dataset_export import datasetConfig, processingConfig, DATASET_LOG_NAME
+# from pipelines.yolo_dataset_export.tasks.gen_anchors import gen_anchors
 from pipelines.yolo_dataset_export.tasks.plots import draw_label_plots
 
 # ========= Helper functions =========
@@ -65,6 +66,17 @@ def post_run_wrapper(func):
 
     return wrapper
 
+def complete_wrapper(func):
+    # Wrap the run task so we can generate dataset stats and validate dataset after they are created
+    def wrapper(self, *args, **kwargs):
+        is_complete = func(self, *args, **kwargs)
+        if is_complete:
+            self.generate_stats()
+            self.validate_dataset()
+        return is_complete
+
+    return wrapper
+
 class DarknetDatasetTask(ForcibleTask):
     dataset_root = luigi.Parameter()
     dataset_name = luigi.Parameter()
@@ -84,6 +96,17 @@ class DarknetDatasetTask(ForcibleTask):
         os.makedirs(self.output()['backup_dir'].path, exist_ok=True)
         os.makedirs(self.output()['stats_dir'].path, exist_ok=True)
 
+        # add dataset loggers
+        timestr = time.strftime("%y%m%d_%H%M%s")
+        log_fp = os.path.join(self.output()['dataset_dir'].path, 'log', '%s_create_dataset.log' % timestr)
+        os.makedirs(os.path.join(self.output()['dataset_dir'].path, 'log'), exist_ok=True)
+        self.dataset_log = logging.getLogger(DATASET_LOG_NAME)
+        self.dataset_log.setLevel(logging.DEBUG)
+        self.dataset_log.propagate = False
+        fh = logging.FileHandler(log_fp, mode='w')
+        fh.setLevel(logging.DEBUG)
+        self.dataset_log.addHandler(fh)
+
         self.interface_log = logging.getLogger('luigi-interface')
 
 
@@ -91,16 +114,17 @@ class DarknetDatasetTask(ForcibleTask):
         super().__init_subclass__()
         # override task run with our wrapper run function that also cleans up
         cls.run = post_run_wrapper(cls.run)
+        cls.complete = complete_wrapper(cls.complete)
 
     def gen_anchors(self):
         output = self.output()
         l = get_label_files(output['train_list'])
         l+= get_label_files(output['test_list'])
         l+= get_label_files(output['valid_list'])
-        gen_anchors(l, output['stats_dir'].path)
+        # gen_anchors(l, output['stats_dir'].path)
 
     def generate_stats(self):
-        self.gen_anchors()
+        # self.gen_anchors()
         self.interface_log.info('='*50)
         self.interface_log.info("Creating dataset stats/figures")
         output = self.output()
@@ -184,6 +208,7 @@ class DarknetDatasetTask(ForcibleTask):
         backup_dir = os.path.join(dataset_dir, 'backup')
         examples_dir = os.path.join(dataset_dir, 'examples')
         stats_dir = os.path.join(dataset_dir, 'dataset_stats')
+        complete_file = os.path.join(dataset_dir, 'complete.txt')
 
         return {'dataset_dir': luigi.LocalTarget(dataset_dir),
                 'train_dir': luigi.LocalTarget(train_dir),
@@ -196,7 +221,11 @@ class DarknetDatasetTask(ForcibleTask):
                 'yolo_names_file': luigi.LocalTarget(yolo_names_file),
                 'backup_dir': luigi.LocalTarget(backup_dir),
                 'examples_dir': luigi.LocalTarget(examples_dir),
-                'stats_dir': luigi.LocalTarget(stats_dir)}
+                'stats_dir': luigi.LocalTarget(stats_dir),
+                'complete_file': luigi.LocalTarget(complete_file)}
+
+    def complete(self):
+        return self.output()['complete_file'].exists()
 
     def cleanup(self):
         print("This task was forced.")
@@ -230,9 +259,10 @@ class DarknetDatasetTask(ForcibleTask):
             os.remove(self.output()['yolo_data_file'].path)
             os.remove(self.output()['yolo_names_file'].path)
 
-    def _get_name_id(self, name):
+    def _get_name_id(self, name,set_type):
         mapped_names = []
-        species_map = self.processing_cfg.species_map
+        cfg = self.dataset_cfg.get_cfg(set_type)
+        species_map = cfg.species_map
         if "*" not in species_map and name not in species_map:
             mapped_names.append(name)
         else:
