@@ -4,13 +4,15 @@ import luigi
 import pandas as pd
 
 from core import ForcibleTask, SQLAlchemyCustomTarget
-from pipelines.ingest.tasks import CreateTableTask, IngestCHESSImagesTask
+from pipelines.ingest.tasks import IngestCHESSImagesTask
 from pipelines.ingest.util.image_utilities import file_key
 
 
 from noaadb import DATABASE_URI, Session
-from noaadb.schema.models import *
+from noaadb.schema.models.survey_data import *
+from noaadb.schema.models.annotation_data import *
 from noaadb.schema.utils.queries import add_species_if_not_exist, add_worker_if_not_exists, add_job_if_not_exists
+
 
 
 class CleanCHESSDetectionsTask(ForcibleTask):
@@ -92,10 +94,8 @@ class IngestCHESSDetectionsTask(ForcibleTask):
     survey = luigi.Parameter()
 
     def requires(self):
-        yield IngestCHESSImagesTask()
-        yield CreateTableTask(
-            children=["Job", "Worker", "Species", "BoundingBox", "Annotation"])
-        yield CleanCHESSDetectionsTask(detection_csv=self.detection_csv)
+       return { 'ingest_chess_images': IngestCHESSImagesTask(),
+                'cleaned_csv': CleanCHESSDetectionsTask(detection_csv=self.detection_csv)}
 
     # make flag in db that this detection file was loaded
     def output(self):
@@ -134,7 +134,7 @@ class IngestCHESSDetectionsTask(ForcibleTask):
         self.output().remove()
 
     def run(self):
-        cleaned_csv = self.input()[2]
+        cleaned_csv = self.input()['cleaned_csv']
         with cleaned_csv.open('r') as f:
             df = pd.read_csv(f)
 

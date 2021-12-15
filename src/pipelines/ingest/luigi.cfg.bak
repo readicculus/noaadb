@@ -64,4 +64,6 @@ xml_directory = ${POLARBEAR_ROOT}/Polar_Bear_Imagery/2016_Chukchi_CHESS_Russia
 annotations_csv = ${POLARBEAR_ROOT}/2016CHESS_PolarBearAnnotations.csv
 
 [Ingest_pb_beufort_19_DetectionsTask]
-xml_directory = ${POLARBEAR_ROOT}/Polar_Bear_Imagery/2019_Beaufort_PolarBears
+;xml_directory = ${POLARBEAR_ROOT}/Polar_Bear_Imagery/2019_Beaufort_PolarBears
+xml_directory = /data/raw_data/PolarBears/Polar Bear Imagery/2019_Beaufort_PolarBears
+force = True

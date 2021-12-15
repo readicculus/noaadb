@@ -1,12 +1,14 @@
 import json
 import logging
 import os
+import random
 
 import cv2
 import luigi
 
 from core import ForcibleTask
-from noaadb.schema.models import TrainTestValidEnum
+from noaadb import Session
+from noaadb.schema.models import TrainTestValidEnum, EOImage
 from pipelines.yolo_dataset_export import chipConfig, datasetConfig, DATASET_LOG_NAME
 
 
@@ -46,6 +48,7 @@ class GenerateImageChips(ForcibleTask):
         with open(str(self.batch_data_file), 'r') as f:
             self.batch_data = json.loads(f.read())
         self.dataset_cfg = datasetConfig()
+        self._complete = super().complete
 
     def cleanup(self):
         pass
@@ -61,6 +64,15 @@ class GenerateImageChips(ForcibleTask):
                 'annotations': luigi.LocalTarget(annotations_fp),
                 'batch_data_file': luigi.LocalTarget(self.batch_data_file)}
 
+    def complete(self):
+        if self.output()['chips_list'].exists():
+            with self.output()['chips_list'].open('r') as f:
+                v = json.loads(f.read())
+                for el in v:
+                    if not os.path.isfile(el['chip_fp']):
+                        return False
+
+        return self._complete()
 
     def _load_image(self):
         image_data = self.batch_data['image']
@@ -158,7 +170,11 @@ class GenerateImageChips(ForcibleTask):
             if not os.path.isfile(image_target_fp):
                 im_chipped = im[tile['y1']:tile['y2'], tile['x1']:tile['x2'], ]
                 cv2.imwrite(image_target_fp, im_chipped, [int(cv2.IMWRITE_JPEG_QUALITY), 100])
+            else:
+                dataset_log.info('File already exists: %s' % image_key)
 
+            if not os.path.isfile(image_target_fp):
+                raise Exception('Error creating %s'%image_target_fp)
             chip_info = {'chip_fp': image_target_fp,'h':tile['y2']-tile['y1'], 'w': tile['x2'] - tile['x1']}
             chip_files_saved.append(chip_info)
 
@@ -170,3 +186,42 @@ class GenerateImageChips(ForcibleTask):
 
         with self.output()['chips_list'].open('w') as f:
             f.write(json.dumps(chip_files_saved))
+
+
+class GenerateBackgroundImageChips(ForcibleTask):
+    num_to_generate = luigi.IntParameter()
+    event_key = luigi.Parameter()
+    output_dir = luigi.Parameter()
+
+    def output(self):
+        targets = {}
+        for i in range(self.num_to_generate):
+            fn_chip = os.path.join(str(self.output_dir), 'BG_%s_%d.jpg' % (str(self.event_key), i))
+            fn_label = os.path.join(str(self.output_dir), 'BG_%s_%d.txt' % (str(self.event_key), i))
+            targets[i] = {'chip': luigi.LocalTarget(fn_chip), 'label': luigi.LocalTarget(fn_label)}
+        return targets
+
+    def cleanup(self):
+        for t in self.output():
+            for k in self.output()[t]:
+                if self.output()[t][k].exists():
+                    self.output()[t][k].remove()
+
+    def run(self):
+        chip_config = chipConfig()
+        s = Session()
+        db_im = s.query(EOImage).filter(EOImage.event_key == self.event_key).one()
+        s.close()
+
+        tiles = tile_2d_stride(db_im.width, db_im.height, chip_config.chip_w,
+                               chip_config.chip_h, chip_config.chip_w,
+                               chip_config.chip_h)
+        random.shuffle(tiles)
+        tiles = tiles[0:self.num_to_generate]
+
+        im = db_im.ocv_load()
+        outputs = self.output()
+        for i, tile in enumerate(tiles):
+            im_chipped = im[tile['y1']:tile['y2'], tile['x1']:tile['x2'], ]
+            cv2.imwrite(outputs[i]['chip'].path, im_chipped, [int(cv2.IMWRITE_JPEG_QUALITY), 100])
+            with outputs[i]['label'].open('w'): pass # create empty label file

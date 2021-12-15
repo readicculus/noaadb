@@ -6,10 +6,11 @@ import os
 import luigi
 
 from core import ForcibleTask, SQLAlchemyCustomTarget
-from pipelines.ingest.tasks import IngestKotzImageDirectoryTask, CreateTableTask
+from pipelines.ingest.tasks import IngestKotzImageDirectoryTask
 from pipelines.ingest.util.image_utilities import file_key, flight_cam_id_from_dir
 from noaadb import Session, DATABASE_URI
-from noaadb.schema.models import EOImage, IRImage, BoundingBox, Annotation, Camera, Flight, Survey
+from noaadb.schema.models.survey_data import Camera, Flight, Survey, EOImage, IRImage
+from noaadb.schema.models.annotation_data import BoundingBox, Annotation
 import pandas as pd
 import numpy as np
 
@@ -190,15 +191,14 @@ class LoadKotzDetectionsTask(ForcibleTask):
                    'incorrect': 'falsepositive',
                    'UNK': 'UNK'}
     def requires(self):
-        yield CreateTableTask(
-            children=["Job", "Worker", "Species", "BoundingBox", "Annotation"])
         flight_id, cam_id = flight_cam_id_from_dir(str(self.directory))
-        yield GetDetectionCSVTask(directory=self.directory, flight_id=flight_id, cam_id=cam_id)
-        yield IngestKotzImageDirectoryTask(directory=self.directory, survey=self.survey)
+        return { 'detection_csv': GetDetectionCSVTask(directory=self.directory, flight_id=flight_id, cam_id=cam_id),
+                 'ingest_kotz_image_dir': IngestKotzImageDirectoryTask(directory=self.directory, survey=self.survey)
+        }
 
     # make flag in db that this detection file was loaded
     def output(self):
-        return SQLAlchemyCustomTarget(DATABASE_URI, 'LoadKotzDetectionsTask', os.path.basename(str(self.input()[1]['csv'].path)), echo=False)
+        return SQLAlchemyCustomTarget(DATABASE_URI, 'LoadKotzDetectionsTask', os.path.basename(str(self.input()['detection_csv']['csv'].path)), echo=False)
 
     def cleanup(self):
         # Cleans up/deletes all Annotation and BoundingBox objects associated with this task's flight and cam id
@@ -243,7 +243,7 @@ class LoadKotzDetectionsTask(ForcibleTask):
         eo_worker = add_worker_if_not_exists(s, 'Gavin', True)
         job = add_job_if_not_exists(s, 'kotz_manual_review', '')
         ir_worker = add_worker_if_not_exists(s, 'Projected', False)
-        merged_csv_fp = self.input()[1]['csv'].path
+        merged_csv_fp = self.input()['detection_csv']['csv'].path
         flight_cam_str = os.path.basename(str(merged_csv_fp)).replace('_merged.csv', '')
         df = pd.read_csv(str(merged_csv_fp))
 

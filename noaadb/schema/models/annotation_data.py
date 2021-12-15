@@ -1,25 +1,20 @@
-import enum
-import math
-from operator import or_
-from typing import TypeVar
-
-from sqlalchemy import Column, Date, VARCHAR, BOOLEAN, ForeignKey, \
-    MetaData, Integer, Float, Enum, case, select, exists, func
-from sqlalchemy.dialects.postgresql import ENUM
-from sqlalchemy.ext.declarative import declarative_base, declared_attr, ConcreteBase
+from sqlalchemy import Column, VARCHAR, BOOLEAN, ForeignKey, \
+    Integer, Enum, UniqueConstraint
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import validates, relationship, column_property, object_session
-from sqlalchemy.schema import CheckConstraint, Sequence
+from sqlalchemy.orm import relationship
+from sqlalchemy.schema import CheckConstraint
 
 from noaadb.schema import JOBWORKERNAME, FILENAME, FILEPATH
-from noaadb.schema.models import Base, EOImage, IRImage, UniqueConstraint, IRWithErrors, IRWithoutErrors, IRVerifiedBackground
+from noaadb.schema.models import NDB_Base
+from noaadb.schema.models.survey_data import EOImage, IRImage
 
 schema_name = 'annotation_data'
 # label_meta = MetaData(schema=schema_name)
 # DetectionBase = declarative_base(metadata=label_meta)
-DetectionBase = Base
+AnnotationBase = NDB_Base
 
-class Job(DetectionBase):
+
+class Job(AnnotationBase):
     __tablename__ = 'jobs'
     __table_args__ = {'schema': schema_name}
     name = Column(JOBWORKERNAME, nullable=False, unique=True, primary_key=True)
@@ -31,7 +26,7 @@ class Job(DetectionBase):
             .format(self.name, self.file_path, self.notes)
 
 
-class Worker(DetectionBase):
+class Worker(AnnotationBase):
     __tablename__ = 'workers'
     __table_args__ = {'schema': schema_name}
     name = Column(JOBWORKERNAME, nullable=False, unique=True, primary_key=True)
@@ -42,7 +37,7 @@ class Worker(DetectionBase):
             .format(self.name, self.human)
 
 
-class Species(DetectionBase):
+class Species(AnnotationBase):
     __tablename__ = 'species'
     __table_args__ = {'schema': schema_name}
 
@@ -54,7 +49,8 @@ class Species(DetectionBase):
         return "<Species(id='{}', name='{}')>" \
             .format(self.id, self.name)
 
-class BoundingBox(DetectionBase):
+
+class BoundingBox(AnnotationBase):
     __tablename__ = 'bounding_boxes'
     id = Column(Integer, autoincrement=True, primary_key=True)
     x1 = Column(Integer)
@@ -68,22 +64,22 @@ class BoundingBox(DetectionBase):
     job = relationship(Job)
 
     @hybrid_property
-    def is_point(self): return self.x1==self.x2 and self.y1 == self.y2
+    def is_point(self): return self.x1 == self.x2 and self.y1 == self.y2
 
     @is_point.expression
-    def is_point(cls): return cls.x1==cls.x2 and cls.y1 == cls.y2
+    def is_point(cls): return cls.x1 == cls.x2 and cls.y1 == cls.y2
 
     @hybrid_property
-    def cx(self): return int(self.x1+(self.x2-self.x1)/2)
+    def cx(self): return int(self.x1 + (self.x2 - self.x1) / 2)
 
     @cx.expression
-    def cx(cls): return int(cls.x1+(cls.x2-cls.x1)/2)
+    def cx(cls): return int(cls.x1 + (cls.x2 - cls.x1) / 2)
 
     @hybrid_property
-    def cy(self): return int(self.y1+(self.y2-self.y1)/2)
+    def cy(self): return int(self.y1 + (self.y2 - self.y1) / 2)
 
     @cy.expression
-    def cy(cls): return int(cls.y1+(cls.y2-cls.y1)/2)
+    def cy(cls): return int(cls.y1 + (cls.y2 - cls.y1) / 2)
 
     @hybrid_property
     def width(self): return self.x2 - self.x1
@@ -120,22 +116,23 @@ class BoundingBox(DetectionBase):
 
     @classmethod
     def from_dict(cls, d):
-        cls(x1 = d['x1'],
-            x2 = d['x2'],
-            y1 = d['y1'],
-            y2 = d['y2'],
-            confidence = d['confidence'],
-            id = d.get('id'),
-            worker_id = d.get('worker_id'),
-            job_id = d.get('job_id'))
+        cls(x1=d['x1'],
+            x2=d['x2'],
+            y1=d['y1'],
+            y2=d['y2'],
+            confidence=d['confidence'],
+            id=d.get('id'),
+            worker_id=d.get('worker_id'),
+            job_id=d.get('job_id'))
         return cls
 
     __table_args__ = (
         CheckConstraint('x1<=x2 AND y1<=y2',
-                        name='bbox_valid'), {'schema': schema_name,},
-        )
+                        name='bbox_valid'), {'schema': schema_name, },
+    )
 
-class Annotation(DetectionBase):
+
+class Annotation(AnnotationBase):
     __tablename__ = 'annotation'
     __table_args__ = {'schema': schema_name}
 
@@ -143,6 +140,7 @@ class Annotation(DetectionBase):
 
     eo_event_key = Column(FILENAME, ForeignKey(EOImage.event_key, ondelete='CASCADE'))
     ir_event_key = Column(FILENAME, ForeignKey(IRImage.event_key, ondelete='CASCADE'))
+    eo_image = relationship("EOImage", back_populates="annotations")
     # eo_image = relationship("EOImage", primaryjoin="foreign(Annotation.event_key)==EOImage.event_key")
     # ir_image = relationship("EOImage", primaryjoin="foreign(Annotation.event_key)==IRImage.event_key")
     # ir_image = relationship('IRImage', back_populates='labels',
@@ -159,13 +157,14 @@ class Annotation(DetectionBase):
     is_shadow = Column(BOOLEAN, nullable=True)
 
     ir_box_id = Column(Integer, ForeignKey(BoundingBox.id, ondelete='CASCADE'))
-    ir_box = relationship(BoundingBox,foreign_keys=[ir_box_id], cascade="all,delete")
+    ir_box = relationship(BoundingBox, foreign_keys=[ir_box_id], cascade="all,delete")
     eo_box_id = Column(Integer, ForeignKey(BoundingBox.id, ondelete='CASCADE'))
-    eo_box = relationship(BoundingBox,foreign_keys=[eo_box_id], cascade="all,delete")
+    eo_box = relationship(BoundingBox, foreign_keys=[eo_box_id], cascade="all,delete")
 
     @hybrid_property
     def species_name(self):
         return self.species.name
+
     @species_name.expression
     def species_name(cls):
         return cls.species.name
@@ -182,27 +181,18 @@ class Annotation(DetectionBase):
              'ir_box': ir_box_d}
         return d
 
-# class Partitions(DetectionBase):
-#     __tablename__ = 'partitions'
-#     id = Column(Integer, autoincrement=True, primary_key=True)
-#     eo_event_key = Column(FILENAME, ForeignKey(EOImage.event_key, ondelete='CASCADE'), nullable=True)
-#     ir_event_key = Column(FILENAME, ForeignKey(IRImage.event_key, ondelete='CASCADE'), nullable=True)
-#
-#     partition = Column('partition', Integer, nullable=False)
-#
-#     __table_args__ = (
-#         CheckConstraint('NOT(eo_event_key IS NULL AND ir_event_key IS NULL)'),
-#         UniqueConstraint(eo_event_key, ir_event_key, type),
-#         {'schema': schema_name},
-#     )
+
 
 import enum
+
+
 class TrainTestValidEnum(enum.Enum):
     train = 1
     test = 2
     valid = 3
 
-class TrainTestValid(DetectionBase):
+
+class TrainTestValid(AnnotationBase):
     __tablename__ = 'train_test_valid'
     id = Column(Integer, autoincrement=True, primary_key=True)
 
@@ -216,7 +206,8 @@ class TrainTestValid(DetectionBase):
         {'schema': schema_name},
     )
 
-class Partitions(DetectionBase):
+
+class Partitions(AnnotationBase):
     __tablename__ = 'image_partitions'
     id = Column(Integer, autoincrement=True, primary_key=True)
 
@@ -245,44 +236,5 @@ class Partitions(DetectionBase):
         {'schema': schema_name},
     )
 
-#
-# class BoundingBoxStaging(DetectionBase):
-#     __tablename__ = 'bounding_box_staging'
-#     id = Column(Integer, autoincrement=True, primary_key=True)
-#     x1 = Column(Integer)
-#     x2 = Column(Integer)
-#     y1 = Column(Integer)
-#     y2 = Column(Integer)
-#     confidence = Column(VARCHAR(32))
-#
-#     target_id = Column(Integer, ForeignKey(IRImage.event_key), nullable=False)
-#     target_box = relationship(BoundingBox)
-#
-#     remove_target = Column(BOOLEAN, default=False)
-#     date_registered = Column(Date)
-#
-#     @property
-#     def cx(self): return int(self.x1+(self.x2-self.x1)/2)
-#
-#     @property
-#     def cy(self): return int(self.y1+(self.y2-self.y1)/2)
-#
-#     @property
-#     def area(self): return int(self.y1+(self.y2-self.y1)/2)
-#
-#     @property
-#     def distance_from_target(self):
-#         target_cx = self.target_box.cx
-#         target_cy = self.target_box.cy
-#         dist = math.hypot(target_cx - self.cx, target_cy - self.cy)
-#
-#         return dist
-#
-#
-#     __table_args__ = (
-#         CheckConstraint('x1<=x2 AND y1<=y2',
-#                         name='bbox_valid'), {'schema': schema_name,},
-#         )
-#
-#
-#
+models = [Job, Worker, Species, BoundingBox, Annotation, Partitions]
+__all__ = ["Job", "Worker", "Species", "BoundingBox", "Annotation", "Partitions", "models"]

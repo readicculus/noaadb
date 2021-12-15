@@ -1,12 +1,37 @@
-from sqlalchemy import Column, Integer, ForeignKey, Date
+from sqlalchemy import Column, Integer, ForeignKey
 
 from noaadb.schema import FILENAME
-from noaadb.schema.models import Base, EOImage, IRImage, CreatedUpdatedTimeMixin
+from noaadb.schema.models import NDB_Base
+from noaadb.schema.models.survey_data import IRImage
+import datetime
+
+import sqlalchemy as sa
+from sqlalchemy import event
 
 schema_name = 'manual_review'
-# label_meta = MetaData(schema=schema_name)
-# DetectionBase = declarative_base(metadata=label_meta)
-ManualReviewBase = Base
+ManualReviewBase = NDB_Base
+
+
+class CreatedUpdatedTimeMixin(object):
+  created_at = sa.Column('created_at', sa.DateTime, nullable=False)
+  updated_at = sa.Column('updated_at', sa.DateTime, nullable=False)
+
+  @staticmethod
+  def create_time(mapper, connection, instance):
+     now = datetime.datetime.utcnow()
+     instance.created_at = now
+     instance.updated_at = now
+
+  @staticmethod
+  def update_time(mapper, connection, instance):
+     now = datetime.datetime.utcnow()
+     instance.updated_at = now
+
+  @classmethod
+  def register(cls):
+     sa.event.listen(cls, 'before_insert', cls.create_time)
+     sa.event.listen(cls, 'before_update', cls.update_time)
+
 
 class IRWithoutErrors(CreatedUpdatedTimeMixin, ManualReviewBase):
     __tablename__ = 'ir_without_errors'
@@ -30,10 +55,12 @@ class IRWithErrors(CreatedUpdatedTimeMixin, ManualReviewBase):
     __table_args__ = (
         {'schema': schema_name},
     )
+
     def __init__(self, **kwargs):
         super(IRWithErrors, self).__init__(**kwargs)
         # do custom initialization here
         self.register()
+
 
 class IRVerifiedBackground(CreatedUpdatedTimeMixin, ManualReviewBase):
     __tablename__ = 'ir_verified_background'
@@ -48,6 +75,7 @@ class IRVerifiedBackground(CreatedUpdatedTimeMixin, ManualReviewBase):
         # do custom initialization here
         self.register()
 
+
 class IRUncertainBackground(CreatedUpdatedTimeMixin, ManualReviewBase):
     __tablename__ = 'ir_uncertain_background'
     id = Column(Integer, autoincrement=True, primary_key=True)
@@ -60,3 +88,7 @@ class IRUncertainBackground(CreatedUpdatedTimeMixin, ManualReviewBase):
         super(IRUncertainBackground, self).__init__(**kwargs)
         # do custom initialization here
         self.register()
+
+
+models = [IRWithoutErrors, IRWithErrors, IRVerifiedBackground, IRUncertainBackground]
+__all__ = ["IRWithoutErrors", "IRWithErrors", "IRVerifiedBackground", "IRUncertainBackground", "models"]

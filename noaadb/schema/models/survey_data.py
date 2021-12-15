@@ -5,22 +5,18 @@ from typing import TypeVar
 import cv2
 import numpy as np
 from sqlalchemy import Column, VARCHAR, DateTime, BOOLEAN, ForeignKey, \
-    MetaData, Integer, UniqueConstraint, Float, String, BigInteger, select
-from sqlalchemy.dialects.postgresql import ENUM
-from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.ext.declarative import declarative_base
+    Integer, UniqueConstraint, Float, String, BigInteger
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 
-
 from noaadb.schema import FILENAME, FILEPATH
+from noaadb.schema.models import NDB_Base
 
 schema_name = 'survey_data'
 # sd_meta = MetaData(schema=schema_name)
 # SurveyDataBase = declarative_base(metadata=sd_meta)
-Base = declarative_base()
 
-SurveyDataBase = Base
+SurveyBase = NDB_Base
 
 ####
 # Survey schema models
@@ -31,14 +27,13 @@ class ImageType(enum.IntEnum):
     FUSED = 3
     ALL = 4
 
-class Survey(SurveyDataBase):
+class Survey(SurveyBase):
     __tablename__ = 'survey'
     __table_args__ = {'schema': schema_name}
     id = Column(Integer, autoincrement=True, primary_key=True)
     name = Column(String(50), unique=True)
 
-
-class Flight(SurveyDataBase):
+class Flight(SurveyBase):
     __tablename__ = 'flight'
     id = Column(Integer, autoincrement=True, primary_key=True)
     flight_name = Column(String(50))
@@ -51,7 +46,7 @@ class Flight(SurveyDataBase):
     )
 
 
-class Camera(SurveyDataBase):
+class Camera(SurveyBase):
     __tablename__ = 'camera'
     id = Column(Integer, autoincrement=True, primary_key=True)
     cam_name = Column(String(20))
@@ -64,7 +59,7 @@ class Camera(SurveyDataBase):
     )
 
 
-class HeaderMeta(SurveyDataBase):
+class HeaderMeta(SurveyBase):
     __tablename__ = 'header_meta'
     __table_args__ = {'schema': schema_name}
     id = Column(Integer, autoincrement=True, primary_key=True)
@@ -81,7 +76,7 @@ class HeaderMeta(SurveyDataBase):
     # )
 
 
-class InstrumentMeta(SurveyDataBase):
+class InstrumentMeta(SurveyBase):
     __tablename__ = 'instrument_meta'
     __table_args__ = {'schema': schema_name}
     event_key = Column(FILENAME, primary_key=True)
@@ -117,7 +112,7 @@ class InstrumentMeta(SurveyDataBase):
 #                              ondelete="CASCADE"), nullable=False, unique=True)
 #     header_meta = relationship("HeaderMeta")#, backref=backref('evt', uselist=False, lazy='select'))
 
-class Homography(SurveyDataBase):
+class Homography(SurveyBase):
     __tablename__ = 'homography'
     __table_args__ = {'schema': schema_name}
 
@@ -145,7 +140,7 @@ class Homography(SurveyDataBase):
 
 
 
-class EOImage(SurveyDataBase):
+class EOImage(SurveyBase):
     __tablename__ = 'eo_image'
     __table_args__ = {'schema': schema_name}
     event_key = Column(FILENAME, primary_key=True)
@@ -176,6 +171,7 @@ class EOImage(SurveyDataBase):
     # labels = relationship('Annotation', backref='eo_image',
     #              primaryjoin='Annotation.eo_event_key==EOImage.event_key',
     #              foreign_keys='Annotation.eo_event_key')
+    annotations = relationship("Annotation", back_populates="eo_image")
 
     def to_dict(self):
         res = {'w': self.width,
@@ -187,11 +183,35 @@ class EOImage(SurveyDataBase):
                }
         return res
 
+    def path(self):
+        return os.path.join(self.directory, self.filename)
+
     def ocv_load(self):
         return cv2.imread(os.path.join(self.directory, self.filename))
 
+    def draw_annotations(self):
+        fontScale = 1.4
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        lineType = 4
 
-class IRImage(SurveyDataBase):
+        im = self.ocv_load()
+        colors = {'Ringed Seal': (70, 153, 144), # Teal
+                  'Bearded Seal': (67, 99, 216), #blue
+                  'Polar Bear': (240, 50, 230), #magenta
+                  'UNK Seal':  (255, 225, 25) #yellow
+                 }
+        for annotation in self.annotations:
+            box = annotation.eo_box
+            color = colors.get(annotation.species.name)
+            if color is None: color = (230, 25, 75) #red
+
+            cv2.rectangle(im, (box.x1, box.y1), (box.x2, box.y2), color, 4)
+            cv2.putText(im, annotation.species.name, (box.x1, box.y1), font,
+                        fontScale, color, lineType)
+
+        return im
+
+class IRImage(SurveyBase):
     __tablename__ = 'ir_image'
     __table_args__ = {'schema': schema_name}
     event_key = Column(FILENAME, primary_key=True)
@@ -230,6 +250,8 @@ class IRImage(SurveyDataBase):
                }
         return res
 
+    def path(self):
+        return os.path.join(self.directory, self.filename)
 
     def ocv_load(self):
         return cv2.imread(os.path.join(self.directory, self.filename), cv2.IMREAD_UNCHANGED)
@@ -241,42 +263,9 @@ class IRImage(SurveyDataBase):
         im_norm = im_norm.astype(np.uint8)
         return im_norm
 
-# class FusedImage(SurveyDataBase):
-#     __tablename__ = 'fused_image'
-#     file_name = Column(FILENAME, primary_key=True)
-#     s3_uri = Column(FILEPATH, nullable=False)
-#     file_path = Column(FILEPATH, nullable=False)
-#
-#     width = Column(Integer, nullable=False)
-#     height = Column(Integer, nullable=False)
-#     depth = Column(Integer, nullable=False)
-#
-#     eo_image_id = Column(FILENAME, ForeignKey(EOImage.file_name))
-#     eo_image = relationship(EOImage)
-#     ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name))
-#     ir_image = relationship(IRImage)
-#     homography_id = Column(Integer, ForeignKey(Homography.id))
-#     homography = relationship(Homography)
-#
-#     def to_dict(self):
-#         res = {'w': self.width,
-#                'h': self.height,
-#                'c': self.depth,
-#                'file_name': self.file_name,
-#                'file_path': self.file_path}
-#         return res
-#
-# class HeaderGroup(SurveyDataBase):
-#     __tablename__ = 'header_group'
-#     id = Column(Integer, autoincrement=True, primary_key=True)
-#     eo_image_id = Column(FILENAME, ForeignKey(EOImage.file_name, ondelete="CASCADE"))
-#     eo_image = relationship(EOImage)
-#     ir_image_id = Column(FILENAME, ForeignKey(IRImage.file_name, ondelete="CASCADE"))
-#     ir_image = relationship(IRImage)
-#     evt_header_id = Column(Integer, ForeignKey(EventMeta.id, ondelete="CASCADE"))
-#     evt_header_meta = relationship("EventMeta")
-#     ins_header_id = Column(Integer, ForeignKey(InstrumentMeta.id, ondelete="CASCADE"))
-#     ins_header_meta = relationship("InstrumentMeta")
-
-
 DBImage = TypeVar('DBImage', EOImage, IRImage)
+
+models = [Survey,Flight,Camera, HeaderMeta, InstrumentMeta, Homography, EOImage, IRImage]
+__all__ = ["Survey","Flight","Camera", "HeaderMeta", "InstrumentMeta",
+           "Homography", "EOImage", "IRImage", "DBImage", "models"]
+

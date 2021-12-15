@@ -3,12 +3,18 @@ import logging
 import os
 
 import luigi
+import collections
+import logging
+import os
 
+import luigi.contrib.hdfs
+import sqlalchemy
+from luigi.contrib.sqla import SQLAlchemyTarget
+from sqlalchemy import DDL
 from core import ForcibleTask, SQLAlchemyCustomTarget
 from noaadb import Session, DATABASE_URI
-from noaadb.schema.models import EOImage, IRImage
+from noaadb.schema.models.survey_data import EOImage, IRImage
 from noaadb.schema.utils.queries import add_or_get_cam_flight_survey
-from pipelines.ingest.tasks import CreateTableTask
 from datetime import datetime
 
 from pipelines.ingest.util.image_size import get_image_size

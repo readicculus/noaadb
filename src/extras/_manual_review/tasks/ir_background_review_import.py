@@ -9,7 +9,6 @@ import luigi
 from extras._manual_review.tasks import IRBackgroundReviewCreateTask
 from noaadb import Session
 from noaadb.schema.models import *
-from pipelines.ingest.tasks import CreateTableTask
 from pipelines.ingest.util.image_utilities import file_key
 
 class IRImportBackgroundReviewTask(luigi.Task):

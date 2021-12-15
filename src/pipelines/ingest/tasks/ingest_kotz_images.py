@@ -8,12 +8,12 @@ import logging
 ###
 
 from core import SQLAlchemyCustomTarget, ForcibleTask
-from pipelines.ingest.tasks import CreateTableTask
+from noaadb.schema.models.survey_data import *
+from pipelines.ingest import imageRegistryConfig
 from pipelines.ingest.util.image_size import get_image_size
 from pipelines.ingest.util.image_utilities import  file_key, MetaParser, safe_int_cast, parse_kotz_filename, safe_float_cast, \
     flight_cam_id_from_dir
 from noaadb import Session, DATABASE_URI
-from noaadb.schema.models import *
 from noaadb.schema.utils.queries import add_or_get_cam_flight_survey
 
 KOTZ_MAPPINGS = {'CENT': 'C', 'LEFT': 'L', 'RIGHT': 'R', 'RGHT': 'R'}
@@ -23,7 +23,7 @@ class IngestKotzImageDirectoryTask(ForcibleTask):
     # dry_run = luigi.BoolParameter
     progress_interval = luigi.IntParameter(default=100)
     def requires(self):
-        return CreateTableTask(children=["Survey", "Flight", "Camera", "HeaderMeta", "InstrumentMeta", "EOImage", "IRImage"])
+        return []
 
     def output(self):
         return SQLAlchemyCustomTarget(DATABASE_URI, 'ingest_images', self.task_id, echo=False)
@@ -63,6 +63,9 @@ class IngestKotzImageDirectoryTask(ForcibleTask):
 
     # Ingest All Images
     def run(self):
+        im_registry = imageRegistryConfig().get_registry()
+        image_registry_dict = im_registry.to_dict()
+
         logger = logging.getLogger('luigi-interface')
         # parse cam and flight id
         flight_id, cam_id = flight_cam_id_from_dir(str(self.directory))
@@ -164,7 +167,13 @@ class IngestKotzImageDirectoryTask(ForcibleTask):
                 c = 3 if im_type == 'rgb' else 1
                 w, h = safe_int_cast(im_meta.get("width")), safe_int_cast(im_meta.get("height"))
                 if w is None or h is None:
-                    w, h = get_image_size(os.path.join(str(self.directory), fn))
+                    registry_obj = image_registry_dict.get(fn)
+                    c = 3 if im_type == 'rgb' else 1
+                    if registry_obj is None:
+                        w, h = get_image_size(os.path.join(str(self.directory), fn))
+                        im_registry.add(filename=fn, width=w,height=h, channels=c)
+                    else:
+                        w, h = registry_obj.width, registry_obj.height
                 im_obj = ImageC(
                     event_key=event_key,
                     filename=fn,
@@ -183,4 +192,5 @@ class IngestKotzImageDirectoryTask(ForcibleTask):
         session.commit()
         session.close()
         self.output().touch()
+        im_registry.commit()
 

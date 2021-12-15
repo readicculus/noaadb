@@ -4,6 +4,9 @@ import luigi
 
 from luigi.task import flatten
 
+from core.target import NOAADBTableTarget
+from noaadb import DATABASE_URI
+from noaadb.schema.models import *
 
 def toggle_force_to_false(func):
     # Wrap the run task so that when run is normally called
@@ -94,3 +97,26 @@ class AlwaysRunTask(luigi.Task):
     def __init_subclass__(cls):
         super().__init_subclass__()
         cls.run = toggle_complete_to_true(cls.run)
+
+class CreateTableTask(luigi.Task):
+    children = luigi.ListParameter()
+    lock = luigi.BoolParameter(default=True)
+    force = luigi.BoolParameter(default=False)
+
+    def requires(self):
+        if len(list(self.children)) > 1:
+            tables = list(reversed(self.children))
+            return CreateTableTask(children=list(reversed(tables[1:])), lock=self.lock, force=self.force)
+        return []
+
+    def output(self):
+        tables = list(reversed(self.children))
+        self.table_name = tables.pop(0)
+        t = globals()[self.table_name]
+        return NOAADBTableTarget(DATABASE_URI, t)
+    #
+    # def cleanup(self):
+    #     self.output().remove()
+
+    def run(self):
+        self.output().touch()

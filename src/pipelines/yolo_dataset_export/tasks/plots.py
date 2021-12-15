@@ -36,7 +36,7 @@ def show_values_on_bars(axs):
     else:
         _show_on_single_plot(axs)
 
-def draw_label_plots(x, out_dir, names, fn_prefix=''):
+def draw_label_plots(x, bg_count, out_dir, names, fn_prefix=''):
     ### Draw labels_correlogram
     if fn_prefix != '': fn_prefix += '_'
     sns.pairplot(x[['x', 'y', 'w', 'h']], corner=True, diag_kind='auto', kind='hist', diag_kws=dict(bins=50),
@@ -48,11 +48,16 @@ def draw_label_plots(x, out_dir, names, fn_prefix=''):
     # matplotlib labels
     nc = len(names)
     ax = plt.subplots(2, 2, figsize=(8, 8), tight_layout=True)[1].ravel()
-    ax[0].hist(x['class_id'].astype(np.int).to_list(), bins=np.linspace(0, nc, nc + 1) - 0.5, rwidth=0.8)
+    class_list = x['class_id'].astype(np.int).to_list()
+    bg_id = max(class_list)+1
+    class_list += [bg_id] * bg_count
+    ax[0].hist(class_list, bins=np.linspace(0, nc+1, nc + 2) - 0.5, rwidth=0.8)
     ax[0].set_xlabel('classes')
     ticks = []
     for t in ax[0].get_xticks():
-        if t.is_integer():
+        if int(t) >= len(names):
+            ticks.append('bg_frames')
+        elif t.is_integer():
             ticks.append(names[int(t)])
         else:
             ticks.append('')

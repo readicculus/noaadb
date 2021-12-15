@@ -1,10 +1,9 @@
-from noaadb.schema.models.mixins import *
-from noaadb.schema.models.survey_data import *
-from noaadb.schema.models.manual_review import *
-from noaadb.schema.models.annotation_data import *
+from sqlalchemy.ext.declarative import declarative_base
+
+NDB_Base = declarative_base()
 
 
-__all__ = ["Base", "CreatedUpdatedTimeMixin", "Survey", "Flight", "Camera", "HeaderMeta", "InstrumentMeta", "Homography", "EOImage", "IRImage",
-           'Job', 'Worker', "Species", "BoundingBox", "Annotation",
-           "IRWithoutErrors", "IRWithErrors", "IRUncertainBackground", "IRVerifiedBackground",
-           "TrainTestValidEnum", "TrainTestValid", "Partitions"]
+from noaadb.schema.models import survey_data, annotation_data, manual_review
+
+
+__all__ = ["NDB_Base", "survey_data", "annotation_data", "manual_review"]

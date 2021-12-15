@@ -143,7 +143,7 @@ class UpdateTrainTestValidStatsTask(luigi.Task):
         s.close()
         output.to_sql(name='train_test_valid_stats',
                       schema='annotation_data',
-                      index_label='Species',
+                      index_label='Speciess',
                       con=engine,
                       if_exists='replace')
 

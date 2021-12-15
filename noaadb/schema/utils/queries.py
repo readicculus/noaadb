@@ -1,6 +1,7 @@
 from sqlalchemy import and_
 
-from noaadb.schema.models import Species, Job, Worker, Survey, Flight, Camera
+from noaadb.schema.models.annotation_data import  Species, Job, Worker
+from noaadb.schema.models.survey_data import Survey, Flight, Camera
 
 
 # filter queries
@@ -31,6 +32,7 @@ def unidentified_labels(q):
 
 
 # Get queries
+
 def add_or_get_cam_flight_survey(s, c, f, survey):
     survey_obj = s.query(Survey).filter_by(name=survey).first()
     if not survey_obj:

@@ -7,7 +7,8 @@ from sqlalchemy import or_
 
 from core import ForcibleTask, SQLAlchemyCustomTarget
 from noaadb import DATABASE_URI, Session
-from noaadb.schema.models import BoundingBox, Annotation, EOImage, IRImage, Species
+from noaadb.schema.models.survey_data import *
+from noaadb.schema.models.annotation_data import *
 from noaadb.schema.utils.queries import add_species_if_not_exist, add_job_if_not_exists, add_worker_if_not_exists
 from pipelines.ingest.tasks import Ingest_pb_ru_ImagesTask, Ingest_pb_us_ImagesTask, Ingest_pb_beufort_19_ImagesTask
 from pipelines.ingest.util.image_utilities import file_key
@@ -105,7 +106,28 @@ class Ingest_pb_beufort_19_DetectionsTask(ForcibleTask):
         return SQLAlchemyCustomTarget(DATABASE_URI, 'LoadDetectionTask', self.task_id, echo=False)
 
     def cleanup(self):
-        pass
+        s=Session()
+        eo_keys = s.query(EOImage.event_key) \
+            .join(Camera, EOImage.camera).join(Flight, Camera.flight).join(Survey, Flight.survey).filter(
+            Survey.name == '2019_beaufort').all()
+        eo_keys = [k for (k,) in eo_keys]
+        ir_keys = s.query(IRImage.event_key) \
+            .join(Camera, IRImage.camera).join(Flight, Camera.flight).join(Survey, Flight.survey).filter(
+            Survey.name == '2019_beaufort').all()
+        ir_keys = [k for (k,) in ir_keys]
+        for a in s.query(Annotation).filter(Annotation.ir_event_key.in_(ir_keys)).all():
+            if a.eo_box: s.delete(a.eo_box)
+            if a.ir_box: s.delete(a.ir_box)
+            s.delete(a)
+        s.flush()
+        for a in s.query(Annotation).filter(Annotation.eo_event_key.in_(eo_keys)).all():
+            if a.eo_box: s.delete(a.eo_box)
+            if a.ir_box: s.delete(a.ir_box)
+            s.delete(a)
+        s.flush()
+        s.commit()
+        s.close()
+        self.output().remove()
 
     def _make_im_dict(self):
         ir_images = glob.glob(os.path.join(str(self.xml_directory), '*ir.tif'))
@@ -144,6 +166,9 @@ class Ingest_pb_beufort_19_DetectionsTask(ForcibleTask):
         yuval_worker = add_worker_if_not_exists(s, 'Yuval', True)
         species = add_species_if_not_exist(s, 'Polar Bear')
         new_annotations = []
+
+
+
         for k in im_dict:
             eo_key = file_key(im_dict[k]['eo']['fn'])[4:]
             ir_key = None if 'fn' not in im_dict[k]['ir'] else file_key(im_dict[k]['ir']['fn'])[4:]
@@ -251,12 +276,21 @@ class Ingest_pb_ru_DetectionsTask(ForcibleTask):
         return SQLAlchemyCustomTarget(DATABASE_URI, 'LoadDetectionTask', self.task_id, echo=False)
 
     def cleanup(self):
-        pass
+        s = Session()
+        eo_keys = s.query(EOImage.event_key).join(Camera, EOImage.camera).join(Flight, Camera.flight).join(Survey, Flight.survey).filter(Survey.name == 'CHESS_ru').all()
+        eo_keys = [k for (k,) in eo_keys]
+        ir_keys = s.query(IRImage.event_key).join(Camera, IRImage.camera).join(Flight, Camera.flight).join(Survey, Flight.survey).filter(Survey.name == 'CHESS_ru').all()
+        ir_keys = [k for (k,) in ir_keys]
+        for a in s.query(Annotation).filter(Annotation.ir_event_key.in_(ir_keys)).all(): s.delete(a)
+        s.flush()
+        for a in s.query(Annotation).filter(Annotation.eo_event_key.in_(eo_keys)).all(): s.delete(a)
+        s.commit()
+        s.close()
+        self.output().remove()
 
     def run(self):
         logger = logging.getLogger('luigi-interface')
 
-        s = Session()
         xml_files = glob.glob(os.path.join(str(self.xml_directory), '*.xml'))
         image_files = glob.glob(os.path.join(str(self.xml_directory), '*.JPG'))
         assert (len(image_files) == len(xml_files))
@@ -307,7 +341,7 @@ class Ingest_pb_ru_DetectionsTask(ForcibleTask):
                 db_box = BoundingBox(x1=box['x1'],
                                      x2=box['x2'],
                                      y1=box['y1'],
-                                     y2=box['y1'],
+                                     y2=box['y2'],
                                      worker = worker,
                                      job = job)
                 s.add(db_box)

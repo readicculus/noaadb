@@ -114,7 +114,11 @@ class ExportYoloIRDatasetTask(DarknetDatasetTask):
 
                 # Make yolo labels
                 # <object-class> <x_center> <y_center> <width> <height>
-                ids = self._get_name_id(label.species_name)
+                ids = self._get_name_id(label.species_name, set_type)
+                if box.x1 < 0: box.x1 = 0
+                if box.y1 < 0: box.y1 = 0
+                if box.x2 > im_w: box.x2 = im_w
+                if box.y2 > im_h: box.y2 = im_h
                 rcx = box.cx / im_w
                 rcy = box.cy / im_h
                 rw = (box.width) / im_w

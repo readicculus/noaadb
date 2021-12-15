@@ -13,6 +13,7 @@ from core import ForcibleTask
 from noaadb.schema.models import TrainTestValidEnum
 from pipelines.yolo_dataset_export import datasetConfig, processingConfig, DATASET_LOG_NAME
 # from pipelines.yolo_dataset_export.tasks.gen_anchors import gen_anchors
+from pipelines.yolo_dataset_export.tasks.gen_anchors import gen_anchors
 from pipelines.yolo_dataset_export.tasks.plots import draw_label_plots
 
 # ========= Helper functions =========
@@ -27,26 +28,31 @@ def read_image_list(target):
 def get_label_files(image_list_target):
     images = read_image_list(image_list_target)
     label_files = []
-    for im in images:
-        lbl_fp = '.'.join(im.split('.')[:-1]) + '.txt'
-        label_files.append(lbl_fp)
+    for im_fp in images:
+        lbl_fp = '.'.join(im_fp.split('.')[:-1]) + '.txt'
+        label_files.append((lbl_fp, im_fp))
     return label_files
 
 def load_labels(image_list_target, flatten=False):
     label_files = get_label_files(image_list_target)
     labels = {}
     if flatten: labels = []
-    for fp in label_files:
+    num_bg = 0
+    for fp,_ in label_files:
         if not flatten: labels[fp] = []
         with open(fp, 'r') as f:
+            line_ct = 0
             for line in f.readlines():
+                line_ct += 1
                 class_id, cx, cy, w, h = line.strip().split(" ")
                 class_id, cx, cy, w, h = int(class_id), float(cx), float(cy), float(w), float(h)
                 if flatten:
                     labels.append({'class_id': class_id, 'x': cx, 'y': cy, 'w': w, 'h': h})
                 else:
                     labels[fp].append({'class_id': class_id, 'x': cx, 'y': cy, 'w': w, 'h': h})
-    return labels
+            if line_ct == 0:
+                num_bg+=1
+    return labels, num_bg
 
 def load_names(target):
     names = []
@@ -116,27 +122,55 @@ class DarknetDatasetTask(ForcibleTask):
         cls.run = post_run_wrapper(cls.run)
         cls.complete = complete_wrapper(cls.complete)
 
+    def get_background_images(self, set_type):
+        labels = get_label_files(self.get_output_by_enum(set_type)['image_list'])
+        bg = []
+        for lfp in labels:
+            try:
+                if os.stat(lfp[0]).st_size == 0:
+                    bg.append(lfp)
+            except: bg.append(lfp)
+
+        return bg
+
     def gen_anchors(self):
         output = self.output()
         l = get_label_files(output['train_list'])
         l+= get_label_files(output['test_list'])
         l+= get_label_files(output['valid_list'])
-        # gen_anchors(l, output['stats_dir'].path)
+        l = [a for (a,b) in l]
+        gen_anchors(l, output['stats_dir'].path)
+
+    def load_data_file(self):
+        d = {}
+        with self.output()['yolo_data_file'].open('r') as f:
+            for l in f.readlines():
+                kv = l.strip().split('=')
+                k = kv[0].strip()
+                v = kv[1].strip()
+                d[k] = v
+        return d
 
     def generate_stats(self):
-        # self.gen_anchors()
+        self.gen_anchors()
         self.interface_log.info('='*50)
         self.interface_log.info("Creating dataset stats/figures")
         output = self.output()
         names = load_names(output['yolo_names_file'])
-        train_labels = load_labels(output['train_list'], flatten=True)
-        test_labels = load_labels(output['test_list'], flatten=True)
-        valid_labels = load_labels(output['valid_list'], flatten=True)
+        d=self.load_data_file()
+        train_list = luigi.LocalTarget(d['train'])
+        test_list = luigi.LocalTarget(d['test'])
+        valid_list = luigi.LocalTarget(d['valid'])
+        train_labels,train_bg = load_labels(train_list, flatten=True)
+        test_labels,test_bg = load_labels(test_list, flatten=True)
+        valid_labels,valid_bg = load_labels(valid_list, flatten=True)
         stats_dir = output['stats_dir'].path
 
-        for labels, pre in zip([train_labels, test_labels, valid_labels], ['train', 'test', 'valid']):
+        for labels, bg_count, pre in zip([train_labels, test_labels, valid_labels],
+                                         [train_bg, test_bg, valid_bg],
+                                         ['train', 'test', 'valid']):
             x = pd.DataFrame(labels)
-            draw_label_plots(x, stats_dir, names, fn_prefix=pre)
+            draw_label_plots(x, bg_count, stats_dir, names, fn_prefix=pre)
         self.interface_log.info("COMPLETE: Creating dataset stats/figures")
         self.interface_log.info('='*50)
 
@@ -146,22 +180,22 @@ class DarknetDatasetTask(ForcibleTask):
         # validate no labels outside of image
         output = self.output()
         names = load_names(output['yolo_names_file'])
-        train_labels = load_labels(output['train_list'], flatten=True)
-        test_labels = load_labels(output['test_list'], flatten=True)
-        valid_labels = load_labels(output['valid_list'], flatten=True)
+        train_labels,_ = load_labels(output['train_list'], flatten=True)
+        test_labels,_ = load_labels(output['test_list'], flatten=True)
+        valid_labels,_ = load_labels(output['valid_list'], flatten=True)
         all = train_labels+test_labels+valid_labels
         df = pd.DataFrame(all)
         x1 = df['x'] - (df['w'] / 2.)
         x2 = df['x'] + (df['w'] / 2.)
         y1 = df['y'] - (df['h'] / 2.)
         y2 = df['y'] + (df['h'] / 2.)
-        PAD = 0.0001
-        assert (x1 >= -PAD).all()
-        assert (x2 <= 1+PAD).all()
-        assert (x1 <= x2).all()
-        assert (y1 >= -PAD).all()
-        assert (y2 <= 1+PAD).all()
-        assert (y1 <= y2).all()
+        PAD = 0.01
+        assert ((x1 >= 0.-PAD).all())
+        assert ((x2 <= 1+PAD).all())
+        assert ((x1 <= x2).all())
+        assert ((y1 >= 0.-PAD).all())
+        assert ((y2 <= 1+PAD).all())
+        assert ((y1 <= y2).all())
         self.interface_log.info("Validation Complete!")
         self.interface_log.info('='*50)
 
@@ -208,7 +242,6 @@ class DarknetDatasetTask(ForcibleTask):
         backup_dir = os.path.join(dataset_dir, 'backup')
         examples_dir = os.path.join(dataset_dir, 'examples')
         stats_dir = os.path.join(dataset_dir, 'dataset_stats')
-        complete_file = os.path.join(dataset_dir, 'complete.txt')
 
         return {'dataset_dir': luigi.LocalTarget(dataset_dir),
                 'train_dir': luigi.LocalTarget(train_dir),
@@ -221,16 +254,16 @@ class DarknetDatasetTask(ForcibleTask):
                 'yolo_names_file': luigi.LocalTarget(yolo_names_file),
                 'backup_dir': luigi.LocalTarget(backup_dir),
                 'examples_dir': luigi.LocalTarget(examples_dir),
-                'stats_dir': luigi.LocalTarget(stats_dir),
-                'complete_file': luigi.LocalTarget(complete_file)}
+                'stats_dir': luigi.LocalTarget(stats_dir)}
 
-    def complete(self):
-        return self.output()['complete_file'].exists()
+
 
     def cleanup(self):
         print("This task was forced.")
         print("About to cleanup dataset: %s" % self.output()['dataset_dir'].path)
         print("If you are ok with continuing type YES.")
+        # if not self.complete():
+        #     return
         response = input()
         if response != 'YES':
             raise Exception("Ran a forced task and did not confirm with 'YES'")
@@ -256,8 +289,10 @@ class DarknetDatasetTask(ForcibleTask):
                 print("Invalid entry: %s.  Try again." % response)
             # also delete examples and yolo names/data files
             self._delete_dir(self.output()['examples_dir'].path)
-            os.remove(self.output()['yolo_data_file'].path)
-            os.remove(self.output()['yolo_names_file'].path)
+            if self.output()['yolo_data_file'].exists():
+                os.remove(self.output()['yolo_data_file'].path)
+            if self.output()['yolo_names_file'].exists():
+                os.remove(self.output()['yolo_names_file'].path)
 
     def _get_name_id(self, name,set_type):
         mapped_names = []

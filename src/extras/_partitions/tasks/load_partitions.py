@@ -5,7 +5,6 @@ from sqlalchemy import tuple_
 
 from noaadb import Session
 from noaadb.schema.models import Annotation, Partitions
-from pipelines.ingest.tasks import CreateTableTask
 from pipelines.partition_annotations.tasks import PartitionAnnotationsTask
 
 

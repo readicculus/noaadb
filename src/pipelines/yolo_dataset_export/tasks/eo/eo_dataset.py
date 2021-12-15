@@ -1,22 +1,18 @@
 import json
 import logging
-import logging
 import os
-import random
-import shutil
 
-import cv2
 import luigi
-import numpy as np
-from sqlalchemy import not_, and_
+from sqlalchemy import not_, desc, asc
 from sqlalchemy.orm import joinedload
 
-from core import ForcibleTask
 from noaadb import Session
-from noaadb.schema.models import Annotation, TrainTestValid, TrainTestValidEnum, Species, EOImage, BoundingBox, or_
+from noaadb.schema.models import Annotation, TrainTestValid, TrainTestValidEnum, Species, EOImage, BoundingBox, \
+    IRVerifiedBackground
 from pipelines.yolo_dataset_export import datasetConfig
 from pipelines.yolo_dataset_export.tasks import DarknetDatasetTask
-from pipelines.yolo_dataset_export.tasks.eo import GenerateImageChips
+from pipelines.yolo_dataset_export.tasks.eo import GenerateImageChips, GenerateBackgroundImageChips
+
 
 class BatchImageAnnotationInformation(luigi.Task):
     artifacts_root = luigi.Parameter()
@@ -101,15 +97,18 @@ class ExportYoloEODatasetTask(DarknetDatasetTask):
         batches_task = BatchImageAnnotationInformation(dataset_name=self.dataset_name)
         luigi.build([batches_task], local_scheduler=True)
         batch_files = batches_task.output()
+        num_by_set_type  = {TrainTestValidEnum.train: 0, TrainTestValidEnum.test:0, TrainTestValidEnum.valid: 0}
         for i, k in enumerate(list(batch_files.keys())):
             batch_target = batch_files[k]
             with batch_target.open('r') as f:
                 batch_data = json.loads(f.read())
             set_type = TrainTestValidEnum[batch_data['set']]
+            num_by_set_type[set_type] += 1
             out_dir = self.get_output_by_enum(set_type)['dir'].path
 
             t = GenerateImageChips(event_key = k, batch_data_file = batch_target.path, chip_output_dir=out_dir)
             yield t
+
 
     def cleanup(self):
         # self._delete_non_image_files(self.output()['train_dir'].path)
@@ -124,6 +123,7 @@ class ExportYoloEODatasetTask(DarknetDatasetTask):
         chip_fp_list = []
         for chip in chips_list:
             chip_fp = chip['chip_fp']
+            assert (os.path.isfile(chip_fp))
             chip_fn = os.path.basename(chip_fp)
             chip_fp_list.append(chip_fp)
 
@@ -157,6 +157,81 @@ class ExportYoloEODatasetTask(DarknetDatasetTask):
                     f.write(line)
         return chip_fp_list
 
+    def delete_background(self, set_type = None):
+        if set_type is None:
+            for set_type in TrainTestValidEnum:
+                self.delete_background(set_type)
+        else:
+            bg = self.get_background_images(set_type)
+            for (lbl_fp, im_fp) in bg:
+                try:
+                    os.remove(lbl_fp)
+                except OSError:
+                    pass
+                try:
+                    os.remove(im_fp)
+                except OSError:
+                    pass
+
+            im_list = self.get_output_by_enum(set_type)['image_list']
+            non_bg_ims = []
+            with im_list.open('r') as f:
+                for l in f.readlines():
+                    l = l.strip()
+                    if os.path.basename(l)[:2] == 'BG':
+                        continue
+                    non_bg_ims.append(l)
+            # with im_list.open('w') as f:
+            with im_list.open('w') as f:
+                for fp in non_bg_ims:
+                    f.write('%s\n'%fp)
+    def generate_background(self):
+        s = Session()
+        background_images = s.query(EOImage.event_key).join(IRVerifiedBackground, IRVerifiedBackground.ir_event_key == EOImage.event_key)\
+            .order_by(asc(EOImage.event_key)).all()
+        s.close()
+        total_bg_frames = len(background_images)
+        max_per_set_bg_frames = int(total_bg_frames/3)
+        for si, set_type in enumerate(TrainTestValidEnum):
+            existing_bg_count = len(self.get_background_images(set_type))
+            tasks = []
+            set_dir = self.get_output_by_enum(set_type)['dir']
+            im_ct = sum(1 for line in open(self.get_output_by_enum(set_type)['image_list'].path))-existing_bg_count
+            cfg = self.dataset_cfg.get_cfg(set_type)
+            bg_ratio = cfg.background_ratio
+            bg_requested= bg_ratio*im_ct
+            chips_per_bg = 20
+            if chips_per_bg < 20:
+                chips_per_bg = 20
+
+            bg_set = background_images[si*max_per_set_bg_frames:si*max_per_set_bg_frames+max_per_set_bg_frames]
+            count = existing_bg_count
+            for (event_key,) in bg_set:
+                if count>bg_requested:
+                    break
+                task = GenerateBackgroundImageChips(num_to_generate=chips_per_bg, event_key=event_key, output_dir=set_dir.path)
+                tasks.append(task)
+                count+=chips_per_bg
+
+            luigi.build(tasks, local_scheduler=True)
+            images = []
+            with open(self.get_output_by_enum(set_type)['image_list'].path, 'r') as f:
+                for l in f.readlines():
+                    images.append(os.path.basename(l.strip()))
+            added_images = 0
+            with open(self.get_output_by_enum(set_type)['image_list'].path,'a') as f:
+                for task in tasks:
+                    chips = task.output()
+                    for ci, chip in chips.items():
+                        chip_fp = chip['chip'].path
+                        if os.path.basename(chip_fp) in images:
+                            continue
+                        f.write('%s\n' % chip_fp)
+                        added_images+=1
+            print('Added %d background images' % added_images)
+
+        self.generate_stats()
+        self.validate_dataset()
 
     def run(self):
         """ Generates a EO image dataset for training with the darknet framework

@@ -14,7 +14,7 @@ import random
 import math
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns; sns.set()  # for plot styling
+import seaborn as sns
 
 
 def gen_anchors(lines, output_dir, dataset_dimensions = (416, 416)):
@@ -62,6 +62,6 @@ def gen_anchors(lines, output_dir, dataset_dimensions = (416, 416)):
     centers3.sort(axis=0)
     print("Your custom anchor boxes are {}".format(centers3))
 
-    F = open("YOLOV3_BDD_Anchors.txt", "w")
-    F.write("{}".format(yoloV3anchors))
-    F.close()
+    # F = open("YOLOV3_BDD_Anchors.txt", "w")
+    # F.write("{}".format(yoloV3anchors))
+    # F.close()
